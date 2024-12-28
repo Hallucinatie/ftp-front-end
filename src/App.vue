@@ -1,28 +1,40 @@
 <template>
   <div id="app">
-    <EnhancedFtpClient />
+    <router-view></router-view>
   </div>
 </template>
 
 <script>
-import EnhancedFtpClient from './components/FileUpload.vue'
-
 export default {
-  name: 'App',
-  components: {
-    EnhancedFtpClient
-  }
+  name: 'App'
 }
 </script>
 
 <style>
 #app {
-  min-height: 100vh;
   margin: 0;
   padding: 0;
-  display: flex;
-  flex-direction: column;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100vw;
+  overflow: hidden;
+  background-color: var(--bg-color);
+  box-sizing: border-box;
 }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  max-width: 100vw;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 /* 确保主要内容区域占满剩余空间 */
 .main-content {
   flex: 1;

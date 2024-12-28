@@ -1,0 +1,449 @@
+<template>
+    <div :class="['app', { 'dark': isDarkMode }]">
+        <!-- Header Section -->
+        <header class="header">
+            <div class="header-content">
+                <h1 class="title">FTP Client</h1>
+                <p class="subtitle">Manage your FTP server connections</p>
+                <button @click="toggleDarkMode" class="theme-toggle">
+                    <Sun v-if="isDarkMode" class="icon" />
+                    <Moon v-else class="icon" />
+                </button>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <!-- Connection Settings -->
+            <section class="card connection-section">
+                <h2 class="section-title">Connection Settings</h2>
+                <div>
+                    <div class="input-group">
+                        <label for="host">Host:</label>
+                        <div class="input-wrapper">
+                            <input id="host" type="text" v-model="host" placeholder="Enter host address" class="input" />
+                            <Server class="input-icon" />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="port">Port:</label>
+                        <div class="input-wrapper">
+                            <input id="port" type="number" v-model="port" placeholder="Enter port number" class="input" />
+                            <Hash class="input-icon" />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="username">Username:</label>
+                        <div class="input-wrapper">
+                            <input id="username" type="text" v-model="username" placeholder="Enter username"
+                                class="input" />
+                            <User class="input-icon" />
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label for="password">Password:</label>
+                        <div class="input-wrapper">
+                            <input id="password" type="password" v-model="password" placeholder="Enter password"
+                                class="input" />
+                            <Lock class="input-icon" />
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Operations -->
+            <section class="card operations-section">
+                <h2 class="section-title">Operations</h2>
+                <div class="button-grid">
+                    <div class="tls-section">
+                        <label class="switch-label">
+                            <input 
+                                type="checkbox" 
+                                v-model="useTLS" 
+                                class="switch-input"
+                            >
+                            <span class="switch-slider"></span>
+                            使用 TLS
+                        </label>
+                    </div>
+                    
+                    <div v-if="useTLS" class="certificate-upload">
+                        <label for="certificate" class="file-label">
+                            <Upload class="button-icon" />
+                            选择证书
+                            <input
+                                type="file"
+                                id="certificate"
+                                @change="handleCertificateUpload"
+                                accept=".crt,.pem"
+                                class="file-input"
+                            >
+                        </label>
+                        <span v-if="certificate" class="file-name">
+                            {{ certificate.name }}
+                        </span>
+                    </div>
+                    
+                    <button 
+                        v-if="!isLoggedIn"
+                        @click="loginToServer" 
+                        class="action-button"
+                    >
+                        <LogIn class="button-icon" /> Log In
+                    </button>
+                    
+                    <button 
+                        v-else
+                        @click="logoutFromServer" 
+                        class="action-button logout"
+                    >
+                        <LogOut class="button-icon" /> Log Out
+                    </button>
+                </div>
+            </section>
+
+            <!-- Status Information -->
+            <section class="card status-section">
+                <div class="status-header">
+                    <h2 class="section-title">Status Information</h2>
+                    <button @click="clearStatusLogs" class="clear-button" title="清空日志">
+                        <Eraser class="clear-icon" />
+                    </button>
+                </div>
+                <div class="status-container">
+                    <transition-group name="fade" tag="ul" class="status-list">
+                        <li v-for="(log, index) in statusLogs" :key="index" class="status-item">
+                            {{ log }}
+                        </li>
+                    </transition-group>
+                </div>
+            </section>
+        </main>
+    </div>
+</template>
+
+<script setup>
+import { ref, nextTick } from 'vue'
+import { Sun, Moon, Server, Hash, User, Lock, Plug2, LogIn, Files, Folder, FolderOpen, Power, Upload, LogOut, Eraser } from 'lucide-vue-next'
+import { useRouter } from 'vue-router'
+
+const router = useRouter()
+
+const host = ref('')
+const port = ref('')
+const username = ref('')
+const password = ref('')
+const statusLogs = ref([])
+const isDarkMode = ref(false)
+const useTLS = ref(false)
+const certificate = ref(null)
+const isLoggedIn = ref(false)
+
+const addStatusLog = (message) => {
+    statusLogs.value = [message, ...statusLogs.value.slice(0, 8)]
+}
+
+const loginToServer = () => {
+    // 检查所有必填字段
+    const missingFields = [];
+    if (!host.value) missingFields.push('主机地址');
+    if (!port.value) missingFields.push('端口');
+    if (!username.value) missingFields.push('用户名');
+    if (!password.value) missingFields.push('密码');
+
+    if (missingFields.length > 0) {
+        addStatusLog(`登录失败: ${missingFields.join(', ')}不能为空！`);
+        return;
+    }
+
+    // 所有字段都已填写
+    addStatusLog(`正在连接到 ${host.value}:${port.value}...`);
+    setTimeout(() => {
+        addStatusLog(`连接成功，正在验证用户凭据...`);
+
+        if (useTLS.value && !certificate.value) {
+            addStatusLog('验证失败: 启用 TLS 时需要选择证书');
+            return;
+        }
+
+        setTimeout(() => {
+            isLoggedIn.value = true;
+            addStatusLog(`验证通过，用户 ${username.value} 登录成功！`);
+            addStatusLog(`当前连接: ${host.value}:${port.value} ${useTLS.value ? '(TLS)' : ''}`);
+            
+            // 确保在状态更新后再进行路由跳转
+            nextTick(() => {
+                router.push('/file-manager');
+            });
+        }, 800);
+    }, 1000);
+}
+
+const toggleDarkMode = () => {
+    isDarkMode.value = !isDarkMode.value
+}
+
+const handleCertificateUpload = (event) => {
+    const file = event.target.files[0]
+    if (file) {
+        certificate.value = file
+        addStatusLog(`证书已选择: ${file.name}`)
+    }
+}
+
+const logoutFromServer = () => {
+    isLoggedIn.value = false
+    addStatusLog(`正在断开与 ${host.value}:${port.value} 的连接...`);
+    setTimeout(() => {
+        addStatusLog('连接已断开，登出成功');
+        // 可选：清空敏感信息
+        password.value = '';
+    }, 1000)
+}
+
+const clearStatusLogs = () => {
+    statusLogs.value = []
+}
+</script>
+
+<style scoped>
+/* 输入框相关样式 */
+.connection-section {
+    display: flex;
+    flex-direction: column;
+    height: 100%;  /* 确保section占满高度 */
+}
+
+/* 添加一个包装器来控制输入框组的布局 */
+.connection-section > .section-title + div {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-evenly;  /* 等间距分布 */
+    height: calc(100% - 3rem);  /* 减去标题的高度 */
+    padding: 1rem 0;
+}
+
+.input-group {
+    width: 90%;
+    margin: 0 auto;  /* 水平居中 */
+}
+
+/* 移除多余的margin设置 */
+.input-group:first-of-type,
+.input-group:last-of-type {
+    margin: 0 auto;
+}
+
+.input-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+.input-wrapper {
+    position: relative;
+}
+
+.input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    padding-left: 2.5rem;
+    border: 2px solid var(--border-color);
+    border-radius: 1rem;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+}
+
+.input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgb(37 99 235 / 0.1);
+}
+
+.input-icon {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #666;
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* 按钮网格布局 */
+.button-grid {
+    display: grid;
+    grid-template-rows: repeat(auto-fit, minmax(50px, 1fr));
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.button-grid button {
+    width: 90%;
+    margin: 0 auto;
+}
+
+/* 操作按钮样式 */
+.action-button {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+    color: white;
+    border: none;
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    letter-spacing: 0.025em;
+}
+
+.action-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px -4px rgb(37 99 235 / 0.25);
+}
+
+.action-button:active {
+    animation: pulse 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.button-icon {
+    margin-right: 0.5rem;
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+/* TLS 开关样式 */
+.tls-section {
+    margin-bottom: 1rem;
+    width: 90%;
+    margin: 0 auto;
+}
+
+.switch-label {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text-color);
+}
+
+.switch-input {
+    display: none;
+}
+
+.switch-slider {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 26px;
+    background-color: var(--text-secondary);
+    border-radius: 26px;
+    margin-right: 12px;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.switch-slider:before {
+    content: "";
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-md);
+}
+
+.switch-input:checked + .switch-slider {
+    background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+}
+
+.switch-input:checked + .switch-slider:before {
+    transform: translateX(24px);
+}
+
+/* 证书上传样式 */
+.certificate-upload {
+    width: 90%;
+    margin: 0.5rem auto;
+}
+
+.file-label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.75rem 1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.file-label:hover {
+    background-color: var(--button-hover);
+}
+
+.file-input {
+    display: none;
+}
+
+.file-name {
+    display: block;
+    margin-top: 0.5rem;
+    text-align: center;
+    color: var(--text-color);
+    font-size: 0.9rem;
+}
+
+/* 登出按钮样式 */
+.logout {
+    background-color: #dc3545;
+}
+
+.logout:hover {
+    background-color: #c82333;
+}
+
+/* 动画 */
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(37, 99, 235, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(37, 99, 235, 0);
+    }
+}
+
+/* 深色模式特定样式 */
+.app.dark .input {
+    background-color: #111827;
+    border-color: #374151;
+}
+
+.app.dark .input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+}
+
+.app.dark .input-icon {
+    color: #9ca3af;
+}
+
+/* 响应式布局 */
+@media (max-width: 640px) {
+    .input-group {
+        width: 100%;
+    }
+}
+</style>
