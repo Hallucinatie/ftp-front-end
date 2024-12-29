@@ -32,8 +32,13 @@
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
                             <span class="file-size">{{ file.size }}</span>
+                            <input type="checkbox" class="file-select" />
                         </div>
                     </div>
+                </div>
+                <!-- 按钮放置在文件列表下方 -->
+                <div class="button-container">
+                    <button @click="uploadFiles" class="action-button">上传选中文件</button>
                 </div>
             </section>
 
@@ -53,8 +58,13 @@
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
                             <span class="file-size">{{ file.size }}</span>
+                            <input type="checkbox" class="file-select" />
                         </div>
                     </div>
+                </div>
+                <!-- 按钮放置在文件列表下方 -->
+                <div class="button-container">
+                    <button @click="downloadFiles" class="action-button">下载选中文件</button>
                 </div>
             </section>
 
@@ -75,14 +85,6 @@
                 </div>
             </section>
         </main>
-
-        <input 
-            type="file" 
-            webkitdirectory 
-            @change="handleFileInput" 
-            style="display: none" 
-            ref="fileInput"
-        />
     </div>
 </template>
 
@@ -94,6 +96,8 @@ const isDarkMode = ref(false)
 const statusLogs = ref([])
 const localPath = ref('C:/')
 const remotePath = ref('/')
+const selectedLocalFiles = ref([])
+const selectedRemoteFiles = ref([])
 
 // 模拟数据
 const localFiles = ref([
@@ -120,37 +124,24 @@ const clearStatusLogs = () => {
     statusLogs.value = []
 }
 
-const openDirectory = async () => {
-    try {
-        // 请求用户选择文件夹
-        const dirHandle = await window.showDirectoryPicker();
-        const files = [];
-        
-        // 遍历文件夹内容
-        for await (const entry of dirHandle.values()) {
-            const file = {
-                name: entry.name,
-                isDirectory: entry.kind === 'directory',
-                size: entry.kind === 'file' ? await (await entry.getFile()).size : '-'
-            };
-            files.push(file);
-        }
-        
-        localFiles.value = files;
-        addStatusLog(`成功打开文件夹: ${dirHandle.name}`);
-    } catch (err) {
-        addStatusLog(`打开文件夹失败: ${err.message}`);
-    }
-}
+const uploadFiles = () => {
+    const selectedFiles = localFiles.value.filter((file, index) => {
+        const checkboxes = document.querySelectorAll('.local-section .file-select');
+        return checkboxes[index].checked;
+    });
+    addStatusLog(`准备上传文件: ${selectedFiles.map(file => file.name).join(', ')}`);
+    // 上传逻辑在这里实现
+};
 
-const handleFileInput = (event) => {
-    const files = Array.from(event.target.files).map(file => ({
-        name: file.name,
-        isDirectory: false,
-        size: file.size
-    }));
-    localFiles.value = files;
-}
+const downloadFiles = () => {
+    const selectedFiles = remoteFiles.value.filter((file, index) => {
+        const checkboxes = document.querySelectorAll('.remote-section .file-select');
+        return checkboxes[index].checked;
+    });
+    addStatusLog(`准备下载文件: ${selectedFiles.map(file => file.name).join(', ')}`);
+    // 下载逻辑在这里实现
+};
+
 </script>
 
 <style scoped>
@@ -263,4 +254,20 @@ const handleFileInput = (event) => {
 .app.dark .file-item:hover {
     background-color: var(--border-color);
 }
-</style> 
+
+.action-button {
+    display: block;
+    margin: 0.5rem auto;
+    padding: 0.5rem 1rem;
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+.action-button:hover {
+    background-color: var(--primary-hover-color);
+}
+</style>
