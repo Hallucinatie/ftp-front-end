@@ -122,106 +122,116 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
-import { Sun, Moon, Server, Hash, User, Lock, Plug2, LogIn, Files, Folder, FolderOpen, Power, Upload, LogOut, Eraser } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
+import { Sun, Moon, Server, Hash, User, Lock, Upload, LogIn, LogOut, Eraser } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
+import { useFtpStore } from '../stores/ftpStore'
 
 const router = useRouter()
+const ftpStore = useFtpStore()
 
 const host = ref('')
 const port = ref('')
 const username = ref('')
 const password = ref('')
-const statusLogs = ref([])
-const isDarkMode = ref(false)
 const useTLS = ref(false)
 const certificate = ref(null)
 const isLoggedIn = ref(false)
 
-const addStatusLog = (message) => {
-    statusLogs.value = [message, ...statusLogs.value.slice(0, 8)]
+// 使用 store 中的状态
+const isDarkMode = computed(() => ftpStore.isDarkMode)
+const statusLogs = computed(() => ftpStore.statusLogs)
+
+const toggleDarkMode = () => {
+    ftpStore.toggleDarkMode()
 }
 
-const socket_login = ref(null); // WebSocket connection
+const addStatusLog = (message) => {
+    ftpStore.addStatusLog(message)
+}
+
+const clearStatusLogs = () => {
+    ftpStore.clearStatusLogs()
+}
+
+const socket_login = ref(null)
 
 const loginToServer = () => {
-    // Check for missing fields
-    const missingFields = [];
-    if (!host.value) missingFields.push('主机地址');
-    if (!port.value) missingFields.push('端口');
-    if (!username.value) missingFields.push('用户名');
-    if (!password.value) missingFields.push('密码');
+    // 检查必填字段
+    const missingFields = []
+    if (!host.value) missingFields.push('主机地址')
+    if (!port.value) missingFields.push('端口')
+    if (!username.value) missingFields.push('用户名')
+    if (!password.value) missingFields.push('密码')
 
     if (missingFields.length > 0) {
-        addStatusLog(`登录失败: ${missingFields.join(', ')}不能为空！`);
-        return;
+        addStatusLog(`登录失败: ${missingFields.join(', ')}不能为空！`)
+        return
     }
 
-    // Establish WebSocket connection
-    socket_login.value = new WebSocket(`ws://127.0.0.1:9002`);
+    // 建立 WebSocket 连接
+    socket_login.value = new WebSocket(`ws://127.0.0.1:9002`)
+    ftpStore.setSocket(socket_login.value)
 
-    // Handle WebSocket events
     socket_login.value.onopen = () => {
-        console.log("WebSocket connected.");
+        console.log("WebSocket connected.")
         
-
-        // Send the `connect` command
         const connectPayload = {
             cmd: "connect",
             host: host.value,
             port: Number(port.value),
             useTLS: useTLS.value,
-        };
-        socket_login.value.send(JSON.stringify(connectPayload));
-        addStatusLog(`发送连接请求...`);
-        
-    };
+        }
+        socket_login.value.send(JSON.stringify(connectPayload))
+        addStatusLog(`发送连接请求...`)
+    }
 
     socket_login.value.onmessage = (event) => {
-        const response = JSON.parse(event.data);
+        const response = JSON.parse(event.data)
         if (response.status === "success") {
-            addStatusLog(`已连接到 ${host.value}:${port.value}`);
-            addStatusLog("连接成功，发送登录请求...");
-            // Send the `login` command
+            addStatusLog(`已连接到 ${host.value}:${port.value}`)
+            addStatusLog("连接成功，发送登录请求...")
+            
             const loginPayload = {
                 cmd: "login",
                 username: username.value,
                 password: password.value,
-            };
-            socket_login.value.send(JSON.stringify(loginPayload));
+            }
+            socket_login.value.send(JSON.stringify(loginPayload))
+            
             socket_login.value.onmessage = (event) => {
-                const response = JSON.parse(event.data);
+                const response = JSON.parse(event.data)
                 if (response.status === "success") {
-                    addStatusLog(`用户 ${username.value} 登录成功！`);
-                    isLoggedIn.value = true;
+                    // 保存连接信息到 store
+                    ftpStore.setConnectionInfo({
+                        host: host.value,
+                        port: port.value,
+                        username: username.value,
+                        isConnected: true
+                    })
+                    
+                    // addStatusLog(`用户 ${username.value} 登录成功！`)
+                    isLoggedIn.value = true
 
-                    // Redirect to the file manager
-                    nextTick(() => {
-                        router.push("/file-manager");
-                    });
-                }else {
-                addStatusLog(`登陆失败: ${response.error}`);
+                    // 跳转到文件管理器页面
+                    router.push("/file-manager")
+                } else {
+                    addStatusLog(`登录失败: ${response.error}`)
                 }
             }
-            
         } else {
-            addStatusLog(`操作失败: ${response.error}`);
+            addStatusLog(`操作失败: ${response.error}`)
         }
-    };
+    }
 
     socket_login.value.onerror = (error) => {
-        addStatusLog(`WebSocket错误: ${error.message}`);
-    };
+        addStatusLog(`WebSocket错误: ${error.message}`)
+    }
 
     socket_login.value.onclose = () => {
-        addStatusLog("WebSocket连接已关闭");
-        isLoggedIn.value = false;
-    };
-};
-
-
-const toggleDarkMode = () => {
-    isDarkMode.value = !isDarkMode.value
+        addStatusLog("WebSocket连接已关闭")
+        isLoggedIn.value = false
+    }
 }
 
 const handleCertificateUpload = (event) => {
@@ -240,10 +250,6 @@ const logoutFromServer = () => {
         // 可选：清空敏感信息
         password.value = '';
     }, 1000)
-}
-
-const clearStatusLogs = () => {
-    statusLogs.value = []
 }
 </script>
 

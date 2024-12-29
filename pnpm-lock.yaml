@@ -14,6 +14,9 @@ importers:
       lucide-vue-next:
         specifier: ^0.469.0
         version: 0.469.0(vue@3.5.13)
+      pinia:
+        specifier: ^2.3.0
+        version: 2.3.0(vue@3.5.13)
       vue:
         specifier: ^3.5.13
         version: 3.5.13
@@ -3491,6 +3494,15 @@ packages:
     resolution: {integrity: sha512-uB80kBFb/tfd68bVleG9T5GGsGPjJrLAUpR5PZIrhBnIaRTQRjqdJSsIKkOP6OAIFbj7GOrcudc5pNjZ+geV2g==}
     engines: {node: '>=6'}
 
+  pinia@2.3.0:
+    resolution: {integrity: sha512-ohZj3jla0LL0OH5PlLTDMzqKiVw2XARmC1XYLdLWIPBMdhDW/123ZWr4zVAhtJm+aoSkFa13pYXskAvAscIkhQ==}
+    peerDependencies:
+      typescript: '>=4.4.4'
+      vue: ^2.7.0 || ^3.5.11
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
   pkg-dir@3.0.0:
     resolution: {integrity: sha512-/E57AYkoeQ25qkxMj5PBOVgF8Kiu/h7cYS30Z5+R7WaiCCBfLq58ZI/dSeaEKb9WVJV5n/03QwrN3IeWIFllvw==}
     engines: {node: '>=6'}
@@ -4674,6 +4686,17 @@ packages:
 
   vue-cli-plugin-electron-builder@2.1.1:
     resolution: {integrity: sha512-ZrxFZ2uxgpwyFUE8LtguYqaTzSfZ1osME1uFlIj/Iz7GtLrATqs23n/BkKEpyEf5nYNAylzIM8ykGAfH/0QdmA==}
+
+  vue-demi@0.14.10:
+    resolution: {integrity: sha512-nMZBOwuzabUO0nLgIcc6rycZEebF6eeUfaiQx9+WSk8e29IbLvPU9feI6tqW4kTo3hvoYAJkMh8n8D0fuISphg==}
+    engines: {node: '>=12'}
+    hasBin: true
+    peerDependencies:
+      '@vue/composition-api': ^1.0.0-rc.1
+      vue: ^3.0.0-0 || ^2.6.0
+    peerDependenciesMeta:
+      '@vue/composition-api':
+        optional: true
 
   vue-hot-reload-api@2.3.4:
     resolution: {integrity: sha512-BXq3jwIagosjgNVae6tkHzzIk6a8MHFtzAdwhnV5VlvPTFxDCvIttgSiHWjdGoTJvXtmRu5HacExfdarRcFhog==}
@@ -8825,6 +8848,14 @@ snapshots:
 
   pify@4.0.1: {}
 
+  pinia@2.3.0(vue@3.5.13):
+    dependencies:
+      '@vue/devtools-api': 6.6.4
+      vue: 3.5.13
+      vue-demi: 0.14.10(vue@3.5.13)
+    transitivePeerDependencies:
+      - '@vue/composition-api'
+
   pkg-dir@3.0.0:
     dependencies:
       find-up: 3.0.0
@@ -10154,6 +10185,10 @@ snapshots:
       - supports-color
       - webpack-cli
       - webpack-command
+
+  vue-demi@0.14.10(vue@3.5.13):
+    dependencies:
+      vue: 3.5.13
 
   vue-hot-reload-api@2.3.4: {}
 

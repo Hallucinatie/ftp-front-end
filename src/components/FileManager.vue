@@ -74,7 +74,7 @@
                 </h2>
                 <div class="file-explorer">
                     <div class="path-navigator">
-                        <button class="nav-button">
+                        <button class="nav-button" @click="goToParentRemoteDirectory" title="返回上级目录">
                             <ArrowLeft class="button-icon" />
                         </button>
                         <input type="text" class="path-input" v-model="remotePath" readonly />
@@ -84,15 +84,24 @@
                              :key="file.name" 
                              class="file-item"
                              :data-selected="selectedRemoteFiles.has(file.name)"
-                             @click="toggleFileSelection('remote', file.name)">
+                             @click="handleRemoteFileClick(file)">
                             <Folder v-if="file.isDirectory" class="file-icon" />
+                            <Link v-else-if="file.isSymlink" class="file-icon" />
                             <File v-else class="file-icon" />
-                            <span class="file-name">{{ file.name }}</span>
+                            
+                            <span class="file-name">
+                                {{ file.name }}
+                                <span v-if="file.isSymlink" class="link-target">
+                                    -> {{ file.linkTarget }}
+                                </span>
+                            </span>
+                            
                             <span class="file-size">{{ formatFileSize(file.size) }}</span>
+                            
                             <input type="checkbox" 
                                    class="file-select" 
                                    :checked="selectedRemoteFiles.has(file.name)"
-                                   @click.stop />
+                                   @click.stop="toggleFileSelection('remote', file.name)" />
                         </div>
                     </div>
                 </div>
@@ -119,13 +128,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { Sun, Moon, Folder, File, ArrowLeft, Eraser, Upload, Download, FolderPlus, Trash2, RefreshCw } from 'lucide-vue-next'
+import { ref, computed, onMounted, watch } from 'vue'
+import { Sun, Moon, Folder, File, Link, ArrowLeft, Eraser, Upload, Download, FolderPlus, Trash2, RefreshCw } from 'lucide-vue-next'
+import { useFtpStore } from '../stores/ftpStore'
+import { useRouter } from 'vue-router'
 const { ipcRenderer, remote } = window.require('electron')
 const path = window.require('path')
 
-const isDarkMode = ref(false)
-const statusLogs = ref([])
+const ftpStore = useFtpStore()
+const router = useRouter()
+
+// 使用 store 中的状态
+const isDarkMode = computed(() => ftpStore.isDarkMode)
+const statusLogs = computed(() => ftpStore.statusLogs)
+const socket = computed(() => ftpStore.socket)
+const connectionInfo = computed(() => ftpStore.connectionInfo)
+
 const localPath = ref('C:/')
 const remotePath = ref('/')
 const selectedLocalFiles = ref(new Set())
@@ -146,15 +164,19 @@ const remoteFiles = ref([
 ])
 
 const toggleDarkMode = () => {
-    isDarkMode.value = !isDarkMode.value
+    ftpStore.toggleDarkMode()
 }
 
 const addStatusLog = (message) => {
-    statusLogs.value = [message, ...statusLogs.value.slice(0, 8)]
+    // 忽略登录成功的消息
+    if (message.includes('anonymous')) {
+        return
+    }
+    ftpStore.addStatusLog(message)
 }
 
 const clearStatusLogs = () => {
-    statusLogs.value = []
+    ftpStore.clearStatusLogs()
 }
 
 const openDirectory = async () => {
@@ -180,6 +202,11 @@ const handleFileInput = (event) => {
 }
 
 const uploadFiles = async () => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        addStatusLog('错误: 未连接到服务器')
+        return
+    }
+    
     if (selectedLocalFiles.value.size === 0) {
         addStatusLog('请选择要上传的文件')
         return
@@ -203,6 +230,11 @@ const uploadFiles = async () => {
 }
 
 const downloadFiles = async () => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        addStatusLog('错误: 未连接到服务器')
+        return
+    }
+    
     if (selectedRemoteFiles.value.size === 0) {
         addStatusLog('请选择要下载的文件')
         return
@@ -239,13 +271,148 @@ const toggleFileSelection = (fileType, fileName) => {
     }
 }
 
+const parseFileInfo = (line) => {
+    console.log('正在解析文件信息:', line)
+    
+    // 更简单的正则表达式，主要关注文件类型、大小和名称
+    const regex = /^([dl-])[\w-]{9}\s+\d+\s+\d+\s+\d+\s+(\d+)\s+[\w\s:]+\s+(.+?)\r?$/
+    const match = regex.exec(line)
+    
+    if (!match) {
+        console.log('文件信息解析失败:', line)
+        return null
+    }
+    
+    const type = match[1]      // 'd', 'l', or '-'
+    const size = parseInt(match[2])
+    let name = match[3]
+    
+    console.log('解析出的信息:', { type, size, name })  // 添加日志
+    
+    // 处理符号链接
+    if (type === 'l') {
+        const [fileName, linkTarget] = name.split(' -> ')
+        const result = {
+            name: fileName.trim(),
+            isDirectory: false,
+            isSymlink: true,
+            linkTarget: linkTarget ? linkTarget.trim() : null,
+            size: size
+        }
+        console.log('符号链接解析结果:', result)  // 添加日志
+        return result
+    }
+    
+    const result = {
+        name: name.trim(),
+        isDirectory: type === 'd',
+        isSymlink: false,
+        linkTarget: null,
+        size: size
+    }
+    console.log('普通文件解析结果:', result)  // 添加日志
+    return result
+}
+
+// 添加一个通用的 WebSocket 消息处理函数
+const handleWebSocketMessage = (cmd, callback) => {
+    return new Promise((resolve, reject) => {
+        const messageHandler = (event) => {
+            try {
+                const response = JSON.parse(event.data)
+                
+                // 完全忽略任何包含登录成功的消息
+                if (response.message?.includes("anonymous") || 
+                    (typeof event.data === 'string' && event.data.includes("anonymous"))) {
+                    return
+                }
+
+                console.log(`[${cmd}] 收到WebSocket响应:`, event.data)
+                console.log(`[${cmd}] 解析后的响应:`, response)
+
+                // 处理不同类型的响应
+                if (cmd === "pwd" && response.path !== undefined) {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
+                } else if (cmd === "list" && response.files !== undefined) {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
+                } else if (cmd === "cd" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
+                }
+            } catch (error) {
+                console.error(`[${cmd}] 处理WebSocket消息时出错:`, error)
+                socket.value.removeEventListener('message', messageHandler)
+                clearTimeout(timeoutId)
+                reject(error)
+            }
+        }
+        
+        socket.value.addEventListener('message', messageHandler)
+        
+        const timeoutId = setTimeout(() => {
+            socket.value.removeEventListener('message', messageHandler)
+            reject(new Error(`命令 ${cmd} 响应超时`))
+        }, 5000)
+    })
+}
+
+// 修改 refreshRemoteFiles 函数
 const refreshRemoteFiles = async () => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        addStatusLog('错误: 未连接到服务器')
+        return
+    }
     try {
-        addStatusLog('正在刷新远程文件列表...')
-        // 这里添加实际的刷新逻辑
-        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟刷新延迟
-        addStatusLog('刷新完成')
+        // 先获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        console.log('发送 pwd 命令:', pwdPayload)
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+            addStatusLog(`当前目录: ${response.path}`)
+        })
+        console.log('收到 pwd 响应:', pwdResponse)
+
+        // 确保在发送 list 命令之前有一个短暂延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+
+        // 根据获取到的路径发送 list 命令
+        const listPayload = {
+            cmd: "list",
+            path: remotePath.value
+        }
+        console.log('发送 list 命令:', listPayload)
+        socket.value.send(JSON.stringify(listPayload))
+
+        // 等待 list 命令的响应
+        const listResponse = await handleWebSocketMessage("list", (response) => {
+            const parsedFiles = response.files
+                .map(line => {
+                    const parsed = parseFileInfo(line)
+                    console.log('解析结果:', line, '=>', parsed)
+                    return parsed
+                })
+                .filter(file => file !== null)
+            
+            console.log('最终文件列表:', parsedFiles)
+            remoteFiles.value = parsedFiles
+            addStatusLog('文件列表已更新')
+        })
+        console.log('收到 list 响应:', listResponse)
     } catch (error) {
+        console.error('刷新文件列表时出错:', error)
         addStatusLog(`刷新失败: ${error.message}`)
     }
 }
@@ -352,6 +519,145 @@ const formatFileSize = (bytes) => {
     return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
+// 修改 navigateRemoteDirectory 函数
+const navigateRemoteDirectory = async (dirName) => {
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        addStatusLog('错误: 未连接到服务器')
+        return
+    }
+
+    const newPath = path.posix.join(remotePath.value, dirName)
+    try {
+        addStatusLog(`正在进入目录: ${newPath}`)
+        
+        // 先发送 cd 命令
+        const cdPayload = {
+            cmd: "cd",
+            path: newPath
+        }
+        socket.value.send(JSON.stringify(cdPayload))
+
+        // 等待 cd 命令的响应
+        await handleWebSocketMessage("cd", () => {
+            addStatusLog(`成功切换到目录: ${newPath}`)
+        })
+
+        // 获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+        })
+
+        // 获取文件列表
+        const listPayload = {
+            cmd: "list"
+        }
+        socket.value.send(JSON.stringify(listPayload))
+
+        await handleWebSocketMessage("list", (response) => {
+            remoteFiles.value = response.files
+                .map(line => parseFileInfo(line))
+                .filter(file => file !== null)
+            addStatusLog(`已获取目录内容`)
+        })
+    } catch (error) {
+        addStatusLog(`导航失败: ${error.message}`)
+    }
+}
+
+// 修改 goToParentRemoteDirectory 函数
+const goToParentRemoteDirectory = async () => {
+    if (remotePath.value === '/') {
+        addStatusLog('已经是根目录')
+        return
+    }
+
+    try {
+        // 发送 cd 命令切换到上级目录
+        const cdPayload = {
+            cmd: "cd",
+            path: ".."  // 使用 .. 表示上级目录
+        }
+        socket.value.send(JSON.stringify(cdPayload))
+
+        // 等待 cd 命令的响应
+        await handleWebSocketMessage("cd", () => {
+            addStatusLog(`成功切换到上级目录`)
+        })
+
+        // 获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+        })
+
+        // 获取文件列表
+        const listPayload = {
+            cmd: "list"
+        }
+        socket.value.send(JSON.stringify(listPayload))
+
+        await handleWebSocketMessage("list", (response) => {
+            remoteFiles.value = response.files
+                .map(line => parseFileInfo(line))
+                .filter(file => file !== null)
+            addStatusLog(`已获取目录内容`)
+        })
+    } catch (error) {
+        addStatusLog(`返回上级目录失败: ${error.message}`)
+    }
+}
+
+const handleRemoteFileClick = (file) => {
+    if (file.isDirectory) {
+        navigateRemoteDirectory(file.name)
+    } else {
+        toggleFileSelection('remote', file.name)
+    }
+}
+
+// 在组件挂载时检查连接
+onMounted(() => {
+    // 检查 socket 连接状态
+    if (!socket.value || socket.value.readyState !== WebSocket.OPEN) {
+        addStatusLog('错误: WebSocket 连接已断开')
+        ftpStore.resetConnection()  // 重置连接状态
+        router.push('/')
+        return
+    }
+
+    addStatusLog(`已连接到服务器: ${connectionInfo.value.host}:${connectionInfo.value.port}`)
+    
+    // 设置 WebSocket 事件监听
+    socket.value.onclose = () => {
+        addStatusLog('与服务器的连接已断开')
+        ftpStore.resetConnection()  // 重置连接状态
+        router.push('/')
+    }
+
+    socket.value.onerror = (error) => {
+        addStatusLog(`WebSocket 错误: ${error.message}`)
+    }
+
+    // 刷新远程文件列表（使用当前路径）
+    refreshRemoteFiles()
+})
+
+// 在 remotePath 变化时输出日志
+watch(remotePath, (newPath) => {
+    console.log('远程路径已更新:', newPath)
+})
+
 </script>
 
 <style scoped>
@@ -413,35 +719,44 @@ const formatFileSize = (bytes) => {
 }
 
 .file-item {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    gap: 1rem;
     align-items: center;
     padding: 0.5rem;
     border-radius: 0.25rem;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    user-select: none;
-    position: relative;
 }
 
-.file-item:hover {
-    background-color: var(--border-color);
+.file-info {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    justify-self: end;
+}
+
+.file-permissions {
+    font-family: monospace;
+    white-space: nowrap;
+}
+
+.link-target {
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+    font-style: italic;
 }
 
 .file-icon {
     width: 1.25rem;
     height: 1.25rem;
-    margin-right: 0.5rem;
-    color: var(--text-color);
 }
 
-.file-name {
-    flex: 1;
-    color: var(--text-color);
+.file-item[data-is-directory="true"] .file-icon {
+    color: var(--primary-color);
 }
 
-.file-size {
-    color: var(--text-secondary);
-    font-size: 0.9rem;
+.file-item[data-is-symlink="true"] .file-icon {
+    color: var(--accent-color);
 }
 
 .local-section,
@@ -537,5 +852,22 @@ const formatFileSize = (bytes) => {
 
 .file-item[data-is-directory="true"] .file-icon {
     color: var(--primary-color);
+}
+
+.file-size {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    justify-self: end;
+}
+
+.link-target {
+    color: var(--text-secondary);
+    margin-left: 0.5rem;
+    font-style: italic;
+}
+
+.file-icon {
+    width: 1.25rem;
+    height: 1.25rem;
 }
 </style>
