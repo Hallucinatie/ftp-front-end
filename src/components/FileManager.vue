@@ -18,16 +18,18 @@
                 <h2 class="section-title">
                     Local Files
                     <div class="button-container">
-                        <button @click="uploadFiles" class="action-button">上传选中文件</button>
+                        <button @click="uploadFiles" class="action-button" title="上传选中文件">
+                            <Upload class="button-icon" />
+                        </button>
                     </div>
                 </h2>
                 <div class="file-explorer">
                     <div class="path-navigator">
-                        <button class="nav-button">
+                        <button class="nav-button" @click="goToParentDirectory" title="返回上级目录">
                             <ArrowLeft class="button-icon" />
                         </button>
-                        <input type="text" class="path-input" v-model="localPath" />
-                        <button @click="openDirectory" class="nav-button">
+                        <input type="text" class="path-input" v-model="localPath" readonly />
+                        <button @click="openDirectory" class="nav-button" title="选择目录">
                             <Folder class="button-icon" />
                         </button>
                     </div>
@@ -35,15 +37,17 @@
                         <div v-for="file in localFiles" 
                              :key="file.name" 
                              class="file-item"
-                             @click="toggleFileSelection('local', file.name)">
+                             :data-selected="selectedLocalFiles.has(file.name)"
+                             @click="handleFileClick(file)"
+                             @contextmenu.prevent="showContextMenu(file)">
                             <Folder v-if="file.isDirectory" class="file-icon" />
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
-                            <span class="file-size">{{ file.size }}</span>
+                            <span class="file-size">{{ formatFileSize(file.size) }}</span>
                             <input type="checkbox" 
                                    class="file-select" 
                                    :checked="selectedLocalFiles.has(file.name)"
-                                   @click.stop />
+                                   @click.stop="toggleFileSelection('local', file.name)" />
                         </div>
                     </div>
                 </div>
@@ -54,7 +58,18 @@
                 <h2 class="section-title">
                     Remote Files
                     <div class="button-container">
-                        <button @click="downloadFiles" class="action-button">下载选中文件</button>
+                        <button @click="refreshRemoteFiles" class="action-button" title="刷新">
+                            <RefreshCw class="button-icon" />
+                        </button>
+                        <button @click="createNewFolder" class="action-button" title="新建文件夹">
+                            <FolderPlus class="button-icon" />
+                        </button>
+                        <button @click="deleteSelectedFiles" class="action-button" title="删除选中文件">
+                            <Trash2 class="button-icon" />
+                        </button>
+                        <button @click="downloadFiles" class="action-button" title="下载选中文件">
+                            <Download class="button-icon" />
+                        </button>
                     </div>
                 </h2>
                 <div class="file-explorer">
@@ -68,11 +83,12 @@
                         <div v-for="file in remoteFiles" 
                              :key="file.name" 
                              class="file-item"
+                             :data-selected="selectedRemoteFiles.has(file.name)"
                              @click="toggleFileSelection('remote', file.name)">
                             <Folder v-if="file.isDirectory" class="file-icon" />
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
-                            <span class="file-size">{{ file.size }}</span>
+                            <span class="file-size">{{ formatFileSize(file.size) }}</span>
                             <input type="checkbox" 
                                    class="file-select" 
                                    :checked="selectedRemoteFiles.has(file.name)"
@@ -104,8 +120,9 @@
 
 <script setup>
 import { ref } from 'vue'
-import { Sun, Moon, Folder, File, ArrowLeft, Eraser } from 'lucide-vue-next'
-const { ipcRenderer } = window.require('electron')
+import { Sun, Moon, Folder, File, ArrowLeft, Eraser, Upload, Download, FolderPlus, Trash2, RefreshCw } from 'lucide-vue-next'
+const { ipcRenderer, remote } = window.require('electron')
+const path = window.require('path')
 
 const isDarkMode = ref(false)
 const statusLogs = ref([])
@@ -113,6 +130,7 @@ const localPath = ref('C:/')
 const remotePath = ref('/')
 const selectedLocalFiles = ref(new Set())
 const selectedRemoteFiles = ref(new Set())
+const directoryHistory = ref([])
 
 // 模拟数据
 const localFiles = ref([
@@ -163,57 +181,175 @@ const handleFileInput = (event) => {
 
 const uploadFiles = async () => {
     if (selectedLocalFiles.value.size === 0) {
-        addStatusLog('请选择要上传的文件');
-        return;
+        addStatusLog('请选择要上传的文件')
+        return
     }
 
-    const selectedFilesList = Array.from(selectedLocalFiles.value);
-    addStatusLog(`准备上传文件: ${selectedFilesList.join(', ')}`);
+    const selectedFilesList = Array.from(selectedLocalFiles.value)
+    addStatusLog(`准备上传文件: ${selectedFilesList.join(', ')}`)
 
     try {
         // 这里添加实际的上传逻辑
-        // 示例：模拟上传过程
         for (const fileName of selectedFilesList) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟上传延迟
-            addStatusLog(`文件 ${fileName} 上传成功`);
+            await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟上传延迟
+            addStatusLog(`文件 ${fileName} 上传成功`)
         }
         
-        selectedLocalFiles.value.clear(); // 清空选择
+        // 清空选择 - 使用新的空 Set
+        selectedLocalFiles.value = new Set()
     } catch (error) {
-        addStatusLog(`上传失败: ${error.message}`);
+        addStatusLog(`上传失败: ${error.message}`)
     }
-};
+}
 
 const downloadFiles = async () => {
     if (selectedRemoteFiles.value.size === 0) {
-        addStatusLog('请选择要下载的文件');
-        return;
+        addStatusLog('请选择要下载的文件')
+        return
     }
 
-    const selectedFilesList = Array.from(selectedRemoteFiles.value);
-    addStatusLog(`准备下载文件: ${selectedFilesList.join(', ')}`);
+    const selectedFilesList = Array.from(selectedRemoteFiles.value)
+    addStatusLog(`准备下载文件: ${selectedFilesList.join(', ')}`)
 
     try {
         // 这里添加实际的下载逻辑
-        // 示例：模拟下载过程
         for (const fileName of selectedFilesList) {
-            await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟下载延迟
-            addStatusLog(`文件 ${fileName} 下载成功`);
+            await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟下载延迟
+            addStatusLog(`文件 ${fileName} 下载成功`)
         }
         
-        selectedRemoteFiles.value.clear(); // 清空选择
+        // 清空选择 - 使用新的空 Set
+        selectedRemoteFiles.value = new Set()
     } catch (error) {
-        addStatusLog(`下载失败: ${error.message}`);
+        addStatusLog(`下载失败: ${error.message}`)
     }
-};
+}
 
 const toggleFileSelection = (fileType, fileName) => {
     const selectedFiles = fileType === 'local' ? selectedLocalFiles : selectedRemoteFiles
+    // 创建新的 Set 来触发响应式更新
     if (selectedFiles.value.has(fileName)) {
-        selectedFiles.value.delete(fileName)
+        const newSet = new Set(selectedFiles.value)
+        newSet.delete(fileName)
+        selectedFiles.value = newSet
     } else {
-        selectedFiles.value.add(fileName)
+        const newSet = new Set(selectedFiles.value)
+        newSet.add(fileName)
+        selectedFiles.value = newSet
     }
+}
+
+const refreshRemoteFiles = async () => {
+    try {
+        addStatusLog('正在刷新远程文件列表...')
+        // 这里添加实际的刷新逻辑
+        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟刷新延迟
+        addStatusLog('刷新完成')
+    } catch (error) {
+        addStatusLog(`刷新失败: ${error.message}`)
+    }
+}
+
+const createNewFolder = async () => {
+    try {
+        const folderName = prompt('请输入文件夹名称:')
+        if (!folderName) return
+        
+        addStatusLog(`正在创建文件夹: ${folderName}`)
+        // 这里添加实际的创建文件夹逻辑
+        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟创建延迟
+        addStatusLog(`文件夹 ${folderName} 创建成功`)
+    } catch (error) {
+        addStatusLog(`创建文件夹失败: ${error.message}`)
+    }
+}
+
+const deleteSelectedFiles = async () => {
+    if (selectedRemoteFiles.value.size === 0) {
+        addStatusLog('请选择要删除的文件')
+        return
+    }
+
+    const selectedFilesList = Array.from(selectedRemoteFiles.value)
+    if (!confirm(`确定要删除这些文件吗?\n${selectedFilesList.join('\n')}`)) {
+        return
+    }
+
+    try {
+        addStatusLog(`正在删除文件: ${selectedFilesList.join(', ')}`)
+        // 这里添加实际的删除逻辑
+        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟删除延迟
+        addStatusLog('删除成功')
+        selectedRemoteFiles.value = new Set()
+    } catch (error) {
+        addStatusLog(`删除失败: ${error.message}`)
+    }
+}
+
+const goToParentDirectory = async () => {
+    try {
+        const parentPath = path.dirname(localPath.value)
+        if (parentPath === localPath.value) {
+            addStatusLog('已经是根目录')
+            return
+        }
+        await navigateToDirectory(parentPath)
+    } catch (err) {
+        addStatusLog(`返回上级目录失败: ${err.message}`)
+    }
+}
+
+const handleFileClick = async (file) => {
+    if (file.isDirectory) {
+        const newPath = path.join(localPath.value, file.name)
+        await navigateToDirectory(newPath)
+    }
+}
+
+const navigateToDirectory = async (targetPath) => {
+    try {
+        const result = await ipcRenderer.invoke('read-directory', targetPath)
+        if (result.success) {
+            localPath.value = result.path
+            localFiles.value = result.files
+            addStatusLog(`已进入目录: ${result.path}`)
+        }
+    } catch (err) {
+        addStatusLog(`打开目录失败: ${err.message}`)
+    }
+}
+
+const showContextMenu = (file) => {
+    const menu = new remote.Menu()
+    
+    if (file.isDirectory) {
+        menu.append(new remote.MenuItem({
+            label: '打开',
+            click: () => handleFileClick(file)
+        }))
+    }
+    
+    menu.append(new remote.MenuItem({
+        label: '复制路径',
+        click: () => {
+            const fullPath = path.join(localPath.value, file.name)
+            remote.clipboard.writeText(fullPath)
+            addStatusLog('路径已复制到剪贴板')
+        }
+    }))
+
+    menu.popup()
+}
+
+// 添加文件大小格式化函数
+const formatFileSize = (bytes) => {
+    if (bytes === '-') return '-'
+    if (bytes === 0) return '0 B'
+    
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    
+    return (bytes / Math.pow(1024, i)).toFixed(2) + ' ' + units[i]
 }
 
 </script>
@@ -224,11 +360,12 @@ const toggleFileSelection = (fileType, fileName) => {
 
 /* 文件管理器特定样式 */
 .file-explorer {
-    height: calc(100% - 60px);
+    height: calc(100% - 50px);
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 1rem;
+    padding-top: 1rem;
 }
 
 .path-navigator {
@@ -283,6 +420,7 @@ const toggleFileSelection = (fileType, fileName) => {
     cursor: pointer;
     transition: background-color 0.2s;
     user-select: none;
+    position: relative;
 }
 
 .file-item:hover {
@@ -333,18 +471,26 @@ const toggleFileSelection = (fileType, fileName) => {
     background-color: var(--border-color);
 }
 
+.button-container {
+    display: flex;
+    gap: 0.5rem;
+    height: 32px;
+    margin-left: auto;
+}
+
 .action-button {
-    padding: 0.25rem 1rem;
+    padding: 0.5rem;
     font-size: 0.85rem;
     height: 32px;
-    white-space: nowrap;
-    margin: 0;
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background-color: var(--primary-color);
     color: white;
     border: none;
     border-radius: 0.25rem;
     cursor: pointer;
-    font-weight: 500;
     transition: all 0.2s ease;
 }
 
@@ -352,6 +498,11 @@ const toggleFileSelection = (fileType, fileName) => {
     opacity: 0.9;
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.button-icon {
+    width: 1rem;
+    height: 1rem;
 }
 
 .file-select {
@@ -363,17 +514,28 @@ const toggleFileSelection = (fileType, fileName) => {
     background-color: var(--primary-color-light);
 }
 
-.button-container {
-    position: static;
-    height: 32px;
-    margin-left: auto;
-}
-
 .section-title {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding: 0.5 rem;
     margin: 0;
+}
+
+/* 添加选中状态的样式 */
+.file-item[data-selected="true"] {
+    background-color: rgba(var(--primary-color-rgb), 0.1);
+}
+
+.file-item[data-is-directory="true"] {
+    cursor: pointer;
+}
+
+.file-item[data-is-directory="true"]:hover {
+    background-color: var(--border-color);
+}
+
+.file-item[data-is-directory="true"] .file-icon {
+    color: var(--primary-color);
 }
 </style>

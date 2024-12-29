@@ -1,10 +1,11 @@
 'use strict'
 
-import { app, protocol, BrowserWindow, ipcMain, dialog } from 'electron'
-import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
-import installExtension, { VUEJS3_DEVTOOLS } from 'electron-devtools-installer'
-import fs from 'fs'
-import path from 'path'
+const { app, protocol, BrowserWindow, ipcMain, dialog } = require('electron')
+const { createProtocol } = require('vue-cli-plugin-electron-builder/lib')
+const installExtension = require('electron-devtools-installer').default
+const { VUEJS3_DEVTOOLS } = require('electron-devtools-installer')
+const fs = require('fs')
+const path = require('path')
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
@@ -112,6 +113,33 @@ ipcMain.handle('open-directory', async () => {
     return {
       success: false,
       error: 'User cancelled'
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message
+    }
+  }
+})
+
+// 添加新的 IPC 处理程序
+ipcMain.handle('read-directory', async (event, dirPath) => {
+  try {
+    const files = fs.readdirSync(dirPath).map(fileName => {
+      const filePath = path.join(dirPath, fileName)
+      const stats = fs.statSync(filePath)
+      return {
+        name: fileName,
+        isDirectory: stats.isDirectory(),
+        size: stats.isDirectory() ? '-' : stats.size,
+        path: filePath
+      }
+    })
+
+    return {
+      success: true,
+      path: dirPath,
+      files: files
     }
   } catch (err) {
     return {

@@ -15,7 +15,7 @@ export default defineConfig({
   base: process.env.ELECTRON ? './' : '/',
   build: {
     rollupOptions: {
-      external: ['electron']
+      external: ['electron', 'path', 'fs']
     }
   },
   optimizeDeps: {
