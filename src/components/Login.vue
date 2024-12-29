@@ -142,8 +142,10 @@ const addStatusLog = (message) => {
     statusLogs.value = [message, ...statusLogs.value.slice(0, 8)]
 }
 
+const socket_login = ref(null); // WebSocket connection
+
 const loginToServer = () => {
-    // 检查所有必填字段
+    // Check for missing fields
     const missingFields = [];
     if (!host.value) missingFields.push('主机地址');
     if (!port.value) missingFields.push('端口');
@@ -155,28 +157,68 @@ const loginToServer = () => {
         return;
     }
 
-    // 所有字段都已填写
-    addStatusLog(`正在连接到 ${host.value}:${port.value}...`);
-    setTimeout(() => {
-        addStatusLog(`连接成功，正在验证用户凭据...`);
+    // Establish WebSocket connection
+    socket_login.value = new WebSocket(`ws://127.0.0.1:9002`);
 
-        if (useTLS.value && !certificate.value) {
-            addStatusLog('验证失败: 启用 TLS 时需要选择证书');
-            return;
-        }
+    // Handle WebSocket events
+    socket_login.value.onopen = () => {
+        console.log("WebSocket connected.");
+        
 
-        setTimeout(() => {
-            isLoggedIn.value = true;
-            addStatusLog(`验证通过，用户 ${username.value} 登录成功！`);
-            addStatusLog(`当前连接: ${host.value}:${port.value} ${useTLS.value ? '(TLS)' : ''}`);
+        // Send the `connect` command
+        const connectPayload = {
+            cmd: "connect",
+            host: host.value,
+            port: Number(port.value),
+            useTLS: useTLS.value,
+        };
+        socket_login.value.send(JSON.stringify(connectPayload));
+        addStatusLog(`发送连接请求...`);
+        
+    };
+
+    socket_login.value.onmessage = (event) => {
+        const response = JSON.parse(event.data);
+        if (response.status === "success") {
+            addStatusLog(`已连接到 ${host.value}:${port.value}`);
+            addStatusLog("连接成功，发送登录请求...");
+            // Send the `login` command
+            const loginPayload = {
+                cmd: "login",
+                username: username.value,
+                password: password.value,
+            };
+            socket_login.value.send(JSON.stringify(loginPayload));
+            socket_login.value.onmessage = (event) => {
+                const response = JSON.parse(event.data);
+                if (response.status === "success") {
+                    addStatusLog(`用户 ${username.value} 登录成功！`);
+                    isLoggedIn.value = true;
+
+                    // Redirect to the file manager
+                    nextTick(() => {
+                        router.push("/file-manager");
+                    });
+                }else {
+                addStatusLog(`登陆失败: ${response.error}`);
+                }
+            }
             
-            // 确保在状态更新后再进行路由跳转
-            nextTick(() => {
-                router.push('/file-manager');
-            });
-        }, 800);
-    }, 1000);
-}
+        } else {
+            addStatusLog(`操作失败: ${response.error}`);
+        }
+    };
+
+    socket_login.value.onerror = (error) => {
+        addStatusLog(`WebSocket错误: ${error.message}`);
+    };
+
+    socket_login.value.onclose = () => {
+        addStatusLog("WebSocket连接已关闭");
+        isLoggedIn.value = false;
+    };
+};
+
 
 const toggleDarkMode = () => {
     isDarkMode.value = !isDarkMode.value
