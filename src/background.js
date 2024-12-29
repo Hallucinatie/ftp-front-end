@@ -1,8 +1,11 @@
 'use strict'
 
-import { app, protocol, BrowserWindow } from 'electron'
+import { app, protocol, BrowserWindow, ipcMain, dialog } from 'electron'
 import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS3_DEVTOOLS } from 'electron-devtools-installer'
+import fs from 'fs'
+import path from 'path'
+
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
 // Scheme must be registered before the app is ready
@@ -16,11 +19,11 @@ async function createWindow() {
     width: 800,
     height: 600,
     webPreferences: {
-      
+
       // Use pluginOptions.nodeIntegration, leave this alone
       // See nklayman.github.io/vue-cli-plugin-electron-builder/guide/security.html#node-integration for more info
-      nodeIntegration: process.env.ELECTRON_NODE_INTEGRATION,
-      contextIsolation: !process.env.ELECTRON_NODE_INTEGRATION
+      nodeIntegration: true,
+      contextIsolation: false
     }
   })
 
@@ -79,3 +82,41 @@ if (isDevelopment) {
     })
   }
 }
+
+// 添加 IPC 处理程序
+ipcMain.handle('open-directory', async () => {
+  try {
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory']
+    })
+
+    if (!result.canceled) {
+      const dirPath = result.filePaths[0]
+      const files = fs.readdirSync(dirPath).map(fileName => {
+        const filePath = path.join(dirPath, fileName)
+        const stats = fs.statSync(filePath)
+        return {
+          name: fileName,
+          isDirectory: stats.isDirectory(),
+          size: stats.isDirectory() ? '-' : stats.size
+        }
+      })
+
+      return {
+        success: true,
+        path: dirPath,
+        files: files
+      }
+    }
+
+    return {
+      success: false,
+      error: 'User cancelled'
+    }
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message
+    }
+  }
+})

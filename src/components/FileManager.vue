@@ -15,36 +15,48 @@
         <main class="main-content">
             <!-- Local Files Section -->
             <section class="card local-section">
-                <h2 class="section-title">Local Files</h2>
+                <h2 class="section-title">
+                    Local Files
+                    <div class="button-container">
+                        <button @click="uploadFiles" class="action-button">上传选中文件</button>
+                    </div>
+                </h2>
                 <div class="file-explorer">
                     <div class="path-navigator">
                         <button class="nav-button">
                             <ArrowLeft class="button-icon" />
                         </button>
-                        <input type="text" class="path-input" v-model="localPath" readonly />
+                        <input type="text" class="path-input" v-model="localPath" />
                         <button @click="openDirectory" class="nav-button">
                             <Folder class="button-icon" />
                         </button>
                     </div>
                     <div class="file-list">
-                        <div v-for="file in localFiles" :key="file.name" class="file-item">
+                        <div v-for="file in localFiles" 
+                             :key="file.name" 
+                             class="file-item"
+                             @click="toggleFileSelection('local', file.name)">
                             <Folder v-if="file.isDirectory" class="file-icon" />
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
                             <span class="file-size">{{ file.size }}</span>
-                            <input type="checkbox" class="file-select" />
+                            <input type="checkbox" 
+                                   class="file-select" 
+                                   :checked="selectedLocalFiles.has(file.name)"
+                                   @click.stop />
                         </div>
                     </div>
-                </div>
-                <!-- 按钮放置在文件列表下方 -->
-                <div class="button-container">
-                    <button @click="uploadFiles" class="action-button">上传选中文件</button>
                 </div>
             </section>
 
             <!-- Remote Files Section -->
             <section class="card remote-section">
-                <h2 class="section-title">Remote Files</h2>
+                <h2 class="section-title">
+                    Remote Files
+                    <div class="button-container">
+                        <button @click="downloadFiles" class="action-button">下载选中文件</button>
+                    </div>
+                </h2>
                 <div class="file-explorer">
                     <div class="path-navigator">
                         <button class="nav-button">
@@ -53,18 +65,20 @@
                         <input type="text" class="path-input" v-model="remotePath" readonly />
                     </div>
                     <div class="file-list">
-                        <div v-for="file in remoteFiles" :key="file.name" class="file-item">
+                        <div v-for="file in remoteFiles" 
+                             :key="file.name" 
+                             class="file-item"
+                             @click="toggleFileSelection('remote', file.name)">
                             <Folder v-if="file.isDirectory" class="file-icon" />
                             <File v-else class="file-icon" />
                             <span class="file-name">{{ file.name }}</span>
                             <span class="file-size">{{ file.size }}</span>
-                            <input type="checkbox" class="file-select" />
+                            <input type="checkbox" 
+                                   class="file-select" 
+                                   :checked="selectedRemoteFiles.has(file.name)"
+                                   @click.stop />
                         </div>
                     </div>
-                </div>
-                <!-- 按钮放置在文件列表下方 -->
-                <div class="button-container">
-                    <button @click="downloadFiles" class="action-button">下载选中文件</button>
                 </div>
             </section>
 
@@ -91,13 +105,14 @@
 <script setup>
 import { ref } from 'vue'
 import { Sun, Moon, Folder, File, ArrowLeft, Eraser } from 'lucide-vue-next'
+const { ipcRenderer } = window.require('electron')
 
 const isDarkMode = ref(false)
 const statusLogs = ref([])
 const localPath = ref('C:/')
 const remotePath = ref('/')
-const selectedLocalFiles = ref([])
-const selectedRemoteFiles = ref([])
+const selectedLocalFiles = ref(new Set())
+const selectedRemoteFiles = ref(new Set())
 
 // 模拟数据
 const localFiles = ref([
@@ -124,23 +139,82 @@ const clearStatusLogs = () => {
     statusLogs.value = []
 }
 
-const uploadFiles = () => {
-    const selectedFiles = localFiles.value.filter((file, index) => {
-        const checkboxes = document.querySelectorAll('.local-section .file-select');
-        return checkboxes[index].checked;
-    });
-    addStatusLog(`准备上传文件: ${selectedFiles.map(file => file.name).join(', ')}`);
-    // 上传逻辑在这里实现
+const openDirectory = async () => {
+    try {
+        const result = await ipcRenderer.invoke('open-directory')
+        if (result.success) {
+            localPath.value = result.path
+            localFiles.value = result.files
+            addStatusLog(`成功打开文件夹: ${result.path}`)
+        }
+    } catch (err) {
+        addStatusLog(`打开文件夹失败: ${err.message}`)
+    }
+}
+
+const handleFileInput = (event) => {
+    const files = Array.from(event.target.files).map(file => ({
+        name: file.name,
+        isDirectory: false,
+        size: file.size
+    }));
+    localFiles.value = files;
+}
+
+const uploadFiles = async () => {
+    if (selectedLocalFiles.value.size === 0) {
+        addStatusLog('请选择要上传的文件');
+        return;
+    }
+
+    const selectedFilesList = Array.from(selectedLocalFiles.value);
+    addStatusLog(`准备上传文件: ${selectedFilesList.join(', ')}`);
+
+    try {
+        // 这里添加实际的上传逻辑
+        // 示例：模拟上传过程
+        for (const fileName of selectedFilesList) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟上传延迟
+            addStatusLog(`文件 ${fileName} 上传成功`);
+        }
+        
+        selectedLocalFiles.value.clear(); // 清空选择
+    } catch (error) {
+        addStatusLog(`上传失败: ${error.message}`);
+    }
 };
 
-const downloadFiles = () => {
-    const selectedFiles = remoteFiles.value.filter((file, index) => {
-        const checkboxes = document.querySelectorAll('.remote-section .file-select');
-        return checkboxes[index].checked;
-    });
-    addStatusLog(`准备下载文件: ${selectedFiles.map(file => file.name).join(', ')}`);
-    // 下载逻辑在这里实现
+const downloadFiles = async () => {
+    if (selectedRemoteFiles.value.size === 0) {
+        addStatusLog('请选择要下载的文件');
+        return;
+    }
+
+    const selectedFilesList = Array.from(selectedRemoteFiles.value);
+    addStatusLog(`准备下载文件: ${selectedFilesList.join(', ')}`);
+
+    try {
+        // 这里添加实际的下载逻辑
+        // 示例：模拟下载过程
+        for (const fileName of selectedFilesList) {
+            await new Promise(resolve => setTimeout(resolve, 1000)); // 模拟下载延迟
+            addStatusLog(`文件 ${fileName} 下载成功`);
+        }
+        
+        selectedRemoteFiles.value.clear(); // 清空选择
+    } catch (error) {
+        addStatusLog(`下载失败: ${error.message}`);
+    }
 };
+
+const toggleFileSelection = (fileType, fileName) => {
+    const selectedFiles = fileType === 'local' ? selectedLocalFiles : selectedRemoteFiles
+    if (selectedFiles.value.has(fileName)) {
+        selectedFiles.value.delete(fileName)
+    } else {
+        selectedFiles.value.add(fileName)
+    }
+}
 
 </script>
 
@@ -150,7 +224,7 @@ const downloadFiles = () => {
 
 /* 文件管理器特定样式 */
 .file-explorer {
-    height: 100%;
+    height: calc(100% - 60px);
     min-height: 0;
     display: flex;
     flex-direction: column;
@@ -208,6 +282,7 @@ const downloadFiles = () => {
     border-radius: 0.25rem;
     cursor: pointer;
     transition: background-color 0.2s;
+    user-select: none;
 }
 
 .file-item:hover {
@@ -235,6 +310,9 @@ const downloadFiles = () => {
 .remote-section {
     height: 100%;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
 }
 
 .status-section {
@@ -256,18 +334,46 @@ const downloadFiles = () => {
 }
 
 .action-button {
-    display: block;
-    margin: 0.5rem auto;
-    padding: 0.5rem 1rem;
+    padding: 0.25rem 1rem;
+    font-size: 0.85rem;
+    height: 32px;
+    white-space: nowrap;
+    margin: 0;
     background-color: var(--primary-color);
     color: white;
     border: none;
     border-radius: 0.25rem;
     cursor: pointer;
-    font-size: 1rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
 }
 
 .action-button:hover {
-    background-color: var(--primary-hover-color);
+    opacity: 0.9;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.file-select {
+    cursor: pointer;
+    margin-left: 0.5rem;
+}
+
+.file-item.selected {
+    background-color: var(--primary-color-light);
+}
+
+.button-container {
+    position: static;
+    height: 32px;
+    margin-left: auto;
+}
+
+.section-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5 rem;
+    margin: 0;
 }
 </style>
