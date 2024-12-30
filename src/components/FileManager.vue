@@ -449,7 +449,13 @@ const handleWebSocketMessage = (cmd, callback) => {
                     clearTimeout(timeoutId)
                     callback(response)
                     resolve(response)
+                }else if (cmd === "delete" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
                 }
+
             } catch (error) {
                 console.error(`[${cmd}] 处理WebSocket消息时出错:`, error)
                 socket.value.removeEventListener('message', messageHandler)
@@ -582,8 +588,41 @@ const deleteSelectedFiles = async () => {
     try {
         addStatusLog(`正在删除文件: ${selectedFilesList.join(', ')}`)
         // 这里添加实际的删除逻辑
-        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟删除延迟
-        addStatusLog('删除成功')
+        // 先获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        console.log('发送 pwd 命令:', pwdPayload)
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+            addStatusLog(`当前目录: ${response.path}`)
+        })
+        console.log('收到 pwd 响应:', pwdResponse)
+
+        // 确保在发送 delete 命令之前有一个短暂延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+        // 发送delete命令
+        for (const fileName of selectedFilesList) {
+            const deletePayload = {
+                cmd: "delete",
+                path: `${remotePath.value}/${fileName}`,
+            };
+            console.log('发送 delete 命令:', deletePayload);
+            socket.value.send(JSON.stringify(deletePayload));
+
+            // 等待 delete 指令的响应
+            const deleteResponse = await handleWebSocketMessage("delete", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`文件 ${fileName} 删除成功`);
+                } else {
+                    throw new Error(`文件 ${fileName} 删除失败: ${response.error}`);
+                }
+            });
+            console.log('收到 delete 响应:', deleteResponse);
+        }
         selectedRemoteFiles.value = new Set()
     } catch (error) {
         addStatusLog(`删除失败: ${error.message}`)
