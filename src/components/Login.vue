@@ -3,8 +3,8 @@
         <!-- Header Section -->
         <header class="header">
             <div class="header-content">
-                <h1 class="title">FTP Client</h1>
-                <p class="subtitle">Manage your FTP server connections</p>
+                <h1 class="title">FTP 客户端</h1>
+                <p class="subtitle">管理你与FTP服务器的连接</p>
                 <button @click="toggleDarkMode" class="theme-toggle">
                     <Sun v-if="isDarkMode" class="icon" />
                     <Moon v-else class="icon" />
@@ -15,34 +15,34 @@
         <main class="main-content">
             <!-- Connection Settings -->
             <section class="card connection-section">
-                <h2 class="section-title">Connection Settings</h2>
+                <h2 class="section-title">连接设置</h2>
                 <div>
                     <div class="input-group">
-                        <label for="host">Host:</label>
+                        <label for="host">主机地址:</label>
                         <div class="input-wrapper">
-                            <input id="host" type="text" v-model="host" placeholder="Enter host address" class="input" />
+                            <input id="host" type="text" v-model="host" placeholder="输入主机地址" class="input" />
                             <Server class="input-icon" />
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="port">Port:</label>
+                        <label for="port">端口:</label>
                         <div class="input-wrapper">
-                            <input id="port" type="number" v-model="port" placeholder="Enter port number" class="input" />
+                            <input id="port" type="number" v-model="port" placeholder="输入端口号" class="input" />
                             <Hash class="input-icon" />
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="username">Username:</label>
+                        <label for="username">用户名:</label>
                         <div class="input-wrapper">
-                            <input id="username" type="text" v-model="username" placeholder="Enter username"
+                            <input id="username" type="text" v-model="username" placeholder="输入用户名"
                                 class="input" />
                             <User class="input-icon" />
                         </div>
                     </div>
                     <div class="input-group">
-                        <label for="password">Password:</label>
+                        <label for="password">密码:</label>
                         <div class="input-wrapper">
-                            <input id="password" type="password" v-model="password" placeholder="Enter password"
+                            <input id="password" type="password" v-model="password" placeholder="输入密码"
                                 class="input" />
                             <Lock class="input-icon" />
                         </div>
@@ -52,7 +52,7 @@
 
             <!-- Operations -->
             <section class="card operations-section">
-                <h2 class="section-title">Operations</h2>
+                <h2 class="section-title">操作</h2>
                 <div class="button-grid">
                     <div class="tls-section">
                         <label class="switch-label">
@@ -69,28 +69,28 @@
                     <div v-if="useTLS" class="certificate-upload">
                         <label for="certificate" class="file-label" @click="handleCertificateUpload">
                             <Upload class="button-icon" />
-                            选择证书
+                            选择客户端证书
                         </label>
                         <span v-if="certificate" class="file-name">
-                            {{ certificate.name }}
+                            {{ certificate.value }}
                         </span>
 
                         <label for="privateKey" class="file-label" @click="handlePrivateKeyUpload">
                             <Upload class="button-icon" />
-                            选择私钥
+                            选择客户端私钥
                             
                         </label>
                         <span v-if="privateKey" class="file-name">
-                            {{ privateKey.name }}
+                            {{ privateKey.value }}
                         </span>
 
                         <label for="ca" class="file-label" @click="handleCAUpload">
                             <Upload class="button-icon" />
-                            选择 CA 文件
+                            选择服务器证书
                             
                         </label>
                         <span v-if="ca" class="file-name">
-                            {{ ca.name }}
+                            {{ ca.value }}
                         </span>
                     </div>
                     
@@ -99,7 +99,7 @@
                         @click="loginToServer" 
                         class="action-button"
                     >
-                        <LogIn class="button-icon" /> Log In
+                        <LogIn class="button-icon" /> 登录
                     </button>
                     
                     <button 
@@ -115,7 +115,7 @@
             <!-- Status Information -->
             <section class="card status-section">
                 <div class="status-header">
-                    <h2 class="section-title">Status Information</h2>
+                    <h2 class="section-title">传输信息</h2>
                     <button @click="clearStatusLogs" class="clear-button" title="清空日志">
                         <Eraser class="clear-icon" />
                     </button>
@@ -149,12 +149,12 @@ const useTLS = ref(false)
 const certificate = ref(null)
 const key = ref(null)
 const ca = ref(null)
-const isLoggedIn = ref(false)
+
 
 // 使用 store 中的状态
 const isDarkMode = computed(() => ftpStore.isDarkMode)
 const statusLogs = computed(() => ftpStore.statusLogs)
-
+const isLoggedIn = computed(() => ftpStore.isLoggedIn)
 const toggleDarkMode = () => {
     ftpStore.toggleDarkMode()
 }
@@ -197,9 +197,9 @@ const loginToServer = () => {
         }
         if (useTLS.value) {
         if (ca && certificate && key) {
-            connectPayload.ca_file = ca.value;        // CA 文件名
-            connectPayload.cert_file = certificate.value; // 证书文件名
-            connectPayload.key_file = key.value;   // 私钥文件名
+            connectPayload.ca_file = ca.value;        // CA 文件名 服务端证书
+            connectPayload.cert_file = certificate.value; // 客户端证书
+            connectPayload.key_file = key.value;   // 客户端私钥
         } else {
             console.error("TLS 需要提供 CA 文件、证书文件和私钥文件！");
             addStatusLog(`缺少必要文件`)
@@ -238,9 +238,12 @@ const loginToServer = () => {
 
                     // 跳转到文件管理器页面
                     router.push("/file-manager")
-                } else {
-                    addStatusLog(`登录失败: ${response.error}`)
+                } else if (response.error===undefined){
+                }else{
+                    addStatusLog(`错误: ${response.error}`)
                 }
+                    
+                
             }
         } else {
             addStatusLog(`操作失败: ${response.error}`)

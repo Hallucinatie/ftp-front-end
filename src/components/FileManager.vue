@@ -3,8 +3,8 @@
         <!-- Header Section -->
         <header class="header">
             <div class="header-content">
-                <h1 class="title">FTP Client</h1>
-                <p class="subtitle">Manage your FTP server connections</p>
+                <h1 class="title">FTP 客户端</h1>
+                <p class="subtitle">管理你与FTP服务器的连接</p>
                 
                 <button @click="toggleDarkMode" class="theme-toggle">
                     <Sun v-if="isDarkMode" class="icon" />
@@ -30,6 +30,14 @@
                         <div class="switch-handle"></div>
                     </div>
                 </div>
+
+                <button 
+                    @click="logoutFromServer" 
+                    class="action-button logout"
+                >
+                <LogOut class="button-icon" /> 登出
+                </button>
+
             </div>
         </header>
 
@@ -37,7 +45,7 @@
             <!-- Local Files Section -->
             <section class="card local-section">
                 <h2 class="section-title">
-                    Local Files
+                    本地文件
                     <div class="button-container">
                         <button @click="uploadFiles" class="action-button" title="上传选中文件">
                             <Upload class="button-icon" />
@@ -77,7 +85,7 @@
             <!-- Remote Files Section -->
             <section class="card remote-section">
                 <h2 class="section-title">
-                    Remote Files
+                    远程文件
                     <div class="button-container">
                         <button @click="refreshRemoteFiles" class="action-button" title="刷新">
                             <RefreshCw class="button-icon" />
@@ -149,7 +157,7 @@
             <!-- Status Information -->
             <section class="card status-section">
                 <div class="status-header">
-                    <h2 class="section-title">Status Information</h2>
+                    <h2 class="section-title">传输信息</h2>
                     <button @click="clearStatusLogs" class="clear-button">
                         <Eraser class="clear-icon" />
                     </button>
@@ -273,24 +281,26 @@ const uploadFiles = async () => {
         // 确保在发送 list 命令之前有一个短暂延迟
         await new Promise(resolve => setTimeout(resolve, 100))
         // 将路径中的左斜杠转换为右斜杠
-        const normalizedPath = localPath.value ? localPath.value.replace(/\//g, '\\') : null;
-        localPath.value = normalizedPath;
+        //const normalizedPath = localPath.value ? localPath.value.replace(/\//g, '\\') : null;
+        //localPath.value = normalizedPath;
         // 这里添加实际的上传逻辑
+        const Name=ref(null);
         for (const fileName of selectedFilesList) {
             const uploadPayload ={
                 cmd:"upload",
                 localPath:`${localPath.value}/${fileName}`,
                 remotePath:`${remotePath.value}/${fileName}`,
-                resume: false
+                resume: true
             };
             console.log('发送 upload 命令:', uploadPayload);
             socket.value.send(JSON.stringify(uploadPayload));
+            Name.value=fileName;
         }
         const uploadResponse = await handleWebSocketMessage("upload", (response) => {
                 if (response.status === "success") {
-                    addStatusLog(`文件 ${fileName} 上传成功`);
+                    addStatusLog(`文件 ${Name} 上传成功`);
                 } else {
-                    throw new Error(`文件 ${fileName} 上传失败: ${response.error}`);
+                    throw new Error(`文件 ${Name} 上传失败: ${response.error}`);
                 }
             });
             console.log('收到 upload 响应:', uploadResponse);
@@ -313,11 +323,12 @@ const downloadFiles = async () => {
     }
 
     // 获取输入框的值
-    const localDownloadFolder = document.getElementById("downloadPathInput").value;
+    const localDownloadFolder = document.getElementById("downloadPathInput").value.replace(/^\//, '');
     if (!localDownloadFolder) {
         addStatusLog('请提供有效的本地下载路径');
         return;
     }
+    
     const selectedFilesList = Array.from(selectedRemoteFiles.value)
     addStatusLog(`准备下载文件: ${selectedFilesList.join(', ')}`)
 
@@ -332,6 +343,10 @@ const downloadFiles = async () => {
         // 等待 pwd 命令的响应
         const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
             remotePath.value = response.path
+            if (remotePath.value.length===1){
+                remotePath.value = response.path.replace(/^\//, '');
+            }
+            
             addStatusLog(`当前目录: ${response.path}`)
         })
         console.log('收到 pwd 响应:', pwdResponse)
@@ -346,7 +361,7 @@ const downloadFiles = async () => {
                 cmd: "download",
                 remotePath: `${remotePath.value}/${fileName}`,
                 localPath: `${localDownloadFolder}/${fileName}`,
-                resume: false
+                resume: true
             };
             console.log('发送 download 命令:', downloadPayload);
             socket.value.send(JSON.stringify(downloadPayload));
@@ -380,49 +395,91 @@ const toggleFileSelection = (fileType, fileName) => {
     }
 }
 
+// const parseFileInfo = (line) => {
+//     console.log('正在解析文件信息:', line)
+    
+//     // 更简单的正则表达式，主要关注文件类型、大小和名称
+//     const regex = /^([dl-])[\w-]{9}\s+\d+\s+\d+\s+\d+\s+(\d+)\s+[\w\s:]+\s+(.+?)\r?$/
+//     const match = regex.exec(line)
+    
+//     if (!match) {
+//         console.log('文件信息解析失败:', line)
+//         return null
+//     }
+    
+//     const type = match[1]      // 'd', 'l', or '-'
+//     const size = parseInt(match[2])
+//     let name = match[3]
+    
+//     console.log('解析出的信息:', { type, size, name })  // 添加日志
+    
+//     // 处理符号链接
+//     if (type === 'l') {
+//         const [fileName, linkTarget] = name.split(' -> ')
+//         const result = {
+//             name: fileName.trim(),
+//             isDirectory: false,
+//             isSymlink: true,
+//             linkTarget: linkTarget ? linkTarget.trim() : null,
+//             size: size
+//         }
+//         console.log('符号链接解析结果:', result)  // 添加日志
+//         return result
+//     }
+    
+//     const result = {
+//         name: name.trim(),
+//         isDirectory: type === 'd',
+//         isSymlink: false,
+//         linkTarget: null,
+//         size: size
+//     }
+//     console.log('普通文件解析结果:', result)  // 添加日志
+//     return result
+// }
 const parseFileInfo = (line) => {
-    console.log('正在解析文件信息:', line)
-    
-    // 更简单的正则表达式，主要关注文件类型、大小和名称
-    const regex = /^([dl-])[\w-]{9}\s+\d+\s+\d+\s+\d+\s+(\d+)\s+[\w\s:]+\s+(.+?)\r?$/
-    const match = regex.exec(line)
-    
+    console.log('正在解析文件信息:', line);
+
+    // Windows 文件列表格式的正则表达式，解析文件类型、大小和名称
+    const regex = /^([dl-])[\w-]{9}\s+\d+\s+\w+\s+\w+\s+(\d+)\s+[\w\s:]+\s+(.+?)\r?$/;
+    const match = regex.exec(line);
+
     if (!match) {
-        console.log('文件信息解析失败:', line)
-        return null
+        console.log('文件信息解析失败:', line);
+        return null;
     }
-    
-    const type = match[1]      // 'd', 'l', or '-'
-    const size = parseInt(match[2])
-    let name = match[3]
-    
-    console.log('解析出的信息:', { type, size, name })  // 添加日志
-    
+
+    const type = match[1]; // 'd', 'l', or '-'
+    const size = parseInt(match[2]);
+    let name = match[3];
+
+    console.log('解析出的信息:', { type, size, name }); // 添加日志
+
     // 处理符号链接
     if (type === 'l') {
-        const [fileName, linkTarget] = name.split(' -> ')
+        const [fileName, linkTarget] = name.split(' -> ');
         const result = {
             name: fileName.trim(),
-            isDirectory: false,
+            isDirectory: type === 'd',
             isSymlink: true,
             linkTarget: linkTarget ? linkTarget.trim() : null,
-            size: size
-        }
-        console.log('符号链接解析结果:', result)  // 添加日志
-        return result
+            size: size,
+        };
+        console.log('符号链接解析结果:', result); // 添加日志
+        return result;
+    }else{
+        const [fileName, linkTarget] = name.split(' -> ');
+        const result = {
+            name: fileName.trim(),
+            isDirectory: type === 'd',
+            isSymlink: true,
+            linkTarget: linkTarget ? linkTarget.trim() : null,
+            size: size,
+        };
+        console.log('符号链接解析结果:', result); // 添加日志
+        return result;
     }
-    
-    const result = {
-        name: name.trim(),
-        isDirectory: type === 'd',
-        isSymlink: false,
-        linkTarget: null,
-        size: size
-    }
-    console.log('普通文件解析结果:', result)  // 添加日志
-    return result
 }
-
 // 添加一个通用的 WebSocket 消息处理函数
 const handleWebSocketMessage = (cmd, callback) => {
     return new Promise((resolve, reject) => {
@@ -918,6 +975,18 @@ const toggleTransferType = async () => {
         addStatusLog(`设置类型失败: ${error.message}`)
     }
 };
+const isLoggedIn = computed(() => ftpStore.isLoggedIn);
+
+const logoutFromServer = () => {
+    isLoggedIn.value = false
+    addStatusLog(`正在断开连接...`);
+    setTimeout(() => {
+        addStatusLog('连接已断开，登出成功');
+        // 可选：清空敏感信息
+        
+    }, 1000)
+    router.push("/")
+}
 </script>
 
 <style scoped>
@@ -1179,4 +1248,13 @@ const toggleTransferType = async () => {
 .switch.active .switch-handle {
     left: 27.5px;
 }
+/* 登出按钮样式 */
+.logout {
+    background-color: #dc3545;
+}
+
+.logout:hover {
+    background-color: #c82333;
+}
+
 </style>

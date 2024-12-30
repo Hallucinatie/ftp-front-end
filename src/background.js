@@ -166,7 +166,7 @@ ipcMain.handle('open-key-dialog', async () => {
   const result = await dialog.showOpenDialog({
       properties: ['openFile'],
       filters: [
-          { name: 'privateKey', extensions: ['key'] } // Accept only .crt and .pem files
+          { name: 'privateKey', extensions: ['key', 'pem'] } // Accept only .crt and .pem files
       ]
   });
 

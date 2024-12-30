@@ -14,6 +14,9 @@ export const useFtpStore = defineStore('ftp', () => {
         isAuthenticated: false
     })
 
+    //登陆状态
+    const isLoggedIn = ref(false)
+    
     // 主题设置
     const isDarkMode = ref(false)
 
