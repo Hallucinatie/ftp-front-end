@@ -20,6 +20,16 @@
                         <div class="switch-handle"></div>
                     </div>
                 </div>
+                <div class="transfer-type-toggle">
+                    <span class="mode-label">{{ transferType ? 'ASCII' : 'BINARY' }}</span>
+                    <div 
+                        class="switch" 
+                        :class="{ active: transferType }" 
+                        @click="toggleTransferType"
+                    >
+                        <div class="switch-handle"></div>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -470,6 +480,11 @@ const handleWebSocketMessage = (cmd, callback) => {
                     clearTimeout(timeoutId)
                     callback(response)
                     resolve(response)
+                }else if (cmd === "setTransferType" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
                 }
 
             } catch (error) {
@@ -876,6 +891,33 @@ const toggleTransferMode = async () => {
         addStatusLog(`设置模式失败: ${error.message}`)
     }
 };
+
+const transferType = ref(false); // false: BINARY, true: ASCII
+
+const toggleTransferType = async () => {
+    transferType.value = !transferType.value;
+    console.log(`当前传输类型: ${transferType.value ? 'ASCII' : 'BINARY'}`);
+    try{
+        // 设置setTransferType
+        const setTransferTypePayload={
+            cmd:"setTransferType",
+            type:`${transferType.value ? 'ASCII' : 'BINARY'}`
+        }
+        console.log('发送 setTransferType 命令:', setTransferTypePayload)
+        socket.value.send(JSON.stringify(setTransferTypePayload))
+        // 等待 setTransferType 指令的响应
+        const setTransferTypeResponse = await handleWebSocketMessage("setTransferType", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`当前传输类型: ${transferType.value ? 'ASCII' : 'BINARY'}`);
+                } else {
+                    throw new Error(`类型更改失败 ${response.error}`);
+                }
+            });
+            console.log('收到 setTransferMode 响应:', setTransferTypeResponse);
+    }catch(error) {
+        addStatusLog(`设置类型失败: ${error.message}`)
+    }
+};
 </script>
 
 <style scoped>
@@ -1096,7 +1138,14 @@ const toggleTransferMode = async () => {
     margin-right: 40px;
     margin-top: -65px;
 }
-
+.transfer-type-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* 靠右对齐 */
+    gap: 10px;
+    margin-right: 180px;
+    margin-top: -25px;
+}
 .mode-label {
     font-size: 16px;
     font-weight: bold;
