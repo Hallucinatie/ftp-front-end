@@ -105,11 +105,20 @@
                         </div>
                     </div>
                     <div class="path-input-container">
-                        <label for="downloadPathInput">下载路径: </label>
+                        <label for="downloadPathInput">下载路径:  </label>
                         <input
                             type="text"
                             id="downloadPathInput"
                             placeholder="输入本地下载路径"
+                            style="width: 300px;" 
+                        />
+                    </div>
+                    <div class="path-input-container">
+                        <label for="mkdirNameInput">新建文件夹: </label>
+                        <input
+                            type="text"
+                            id="mkdirNameInput"
+                            placeholder="输入新建文件夹名称"
                             style="width: 300px;" 
                         />
                     </div>
@@ -435,6 +444,11 @@ const handleWebSocketMessage = (cmd, callback) => {
                     clearTimeout(timeoutId)
                     callback(response)
                     resolve(response)
+                }else if (cmd === "mkdir" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
                 }
             } catch (error) {
                 console.error(`[${cmd}] 处理WebSocket消息时出错:`, error)
@@ -508,13 +522,47 @@ const refreshRemoteFiles = async () => {
 
 const createNewFolder = async () => {
     try {
-        const folderName = prompt('请输入文件夹名称:')
-        if (!folderName) return
-        
+        // 新文件夹名字
+        const folderName = document.getElementById("mkdirNameInput").value;
+        if (!folderName) {
+            addStatusLog(`请输入新建文件夹名称`)
+            return
+        }
         addStatusLog(`正在创建文件夹: ${folderName}`)
-        // 这里添加实际的创建文件夹逻辑
-        await new Promise(resolve => setTimeout(resolve, 500)) // 模拟创建延迟
-        addStatusLog(`文件夹 ${folderName} 创建成功`)
+        // 先获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        console.log('发送 pwd 命令:', pwdPayload)
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+            addStatusLog(`当前目录: ${response.path}`)
+        })
+        console.log('收到 pwd 响应:', pwdResponse)
+
+        // 确保在发送 mkdir 命令之前有一个短暂延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+        
+        // 根据路径发送 mkdir命令
+        const mkdirPayload={
+            cmd:"mkdir",
+            path:`${remotePath.value}/${folderName}`
+        }
+        console.log('发送 mkdir 命令:', mkdirPayload)
+        socket.value.send(JSON.stringify(mkdirPayload))
+        // 等待 mkdir 指令的响应
+        const mkdirResponse = await handleWebSocketMessage("mkdir", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`文件夹 ${folderName} 创建成功`);
+                } else {
+                    throw new Error(`文件夹 ${folderName} 创建失败: ${response.error}`);
+                }
+            });
+            console.log('收到 mkdir 响应:', mkdirResponse);
+        
     } catch (error) {
         addStatusLog(`创建文件夹失败: ${error.message}`)
     }
