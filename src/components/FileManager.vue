@@ -226,12 +226,44 @@ const uploadFiles = async () => {
     addStatusLog(`准备上传文件: ${selectedFilesList.join(', ')}`)
 
     try {
+        // 先获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        console.log('发送 pwd 命令:', pwdPayload)
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+            addStatusLog(`当前目录: ${response.path}`)
+        })
+        console.log('收到 pwd 响应:', pwdResponse)
+
+        // 确保在发送 list 命令之前有一个短暂延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+        // 将路径中的左斜杠转换为右斜杠
+        const normalizedPath = localPath.value ? localPath.value.replace(/\//g, '\\') : null;
+        localPath.value = normalizedPath;
         // 这里添加实际的上传逻辑
         for (const fileName of selectedFilesList) {
-            await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟上传延迟
-            addStatusLog(`文件 ${fileName} 上传成功`)
+            const uploadPayload ={
+                cmd:"upload",
+                localPath:`${localPath.value}/${fileName}`,
+                remotePath:`${remotePath.value}/${fileName}`,
+                resume: false
+            };
+            console.log('发送 upload 命令:', uploadPayload);
+            socket.value.send(JSON.stringify(uploadPayload));
         }
-        
+        const uploadResponse = await handleWebSocketMessage("upload", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`文件 ${fileName} 上传成功`);
+                } else {
+                    throw new Error(`文件 ${fileName} 上传失败: ${response.error}`);
+                }
+            });
+            console.log('收到 upload 响应:', uploadResponse);
         // 清空选择 - 使用新的空 Set
         selectedLocalFiles.value = new Set()
     } catch (error) {
@@ -394,6 +426,11 @@ const handleWebSocketMessage = (cmd, callback) => {
                     callback(response)
                     resolve(response)
                 } else if (cmd === "download" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
+                } else if (cmd === "upload" && response.status === "success") {
                     socket.value.removeEventListener('message', messageHandler)
                     clearTimeout(timeoutId)
                     callback(response)
