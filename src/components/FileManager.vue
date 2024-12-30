@@ -104,9 +104,18 @@
                                    @click.stop="toggleFileSelection('remote', file.name)" />
                         </div>
                     </div>
+                    <div class="path-input-container">
+                        <label for="downloadPathInput">下载路径: </label>
+                        <input
+                            type="text"
+                            id="downloadPathInput"
+                            placeholder="输入本地下载路径"
+                            style="width: 300px;" 
+                        />
+                    </div>
                 </div>
             </section>
-
+            
             <!-- Status Information -->
             <section class="card status-section">
                 <div class="status-header">
@@ -123,6 +132,7 @@
                     </transition-group>
                 </div>
             </section>
+            
         </main>
     </div>
 </template>
@@ -240,18 +250,55 @@ const downloadFiles = async () => {
         return
     }
 
+    // 获取输入框的值
+    const localDownloadFolder = document.getElementById("downloadPathInput").value;
+    if (!localDownloadFolder) {
+        addStatusLog('请提供有效的本地下载路径');
+        return;
+    }
     const selectedFilesList = Array.from(selectedRemoteFiles.value)
     addStatusLog(`准备下载文件: ${selectedFilesList.join(', ')}`)
 
     try {
+        // 先获取当前路径
+        const pwdPayload = {
+            cmd: "pwd"
+        }
+        console.log('发送 pwd 命令:', pwdPayload)
+        socket.value.send(JSON.stringify(pwdPayload))
+
+        // 等待 pwd 命令的响应
+        const pwdResponse = await handleWebSocketMessage("pwd", (response) => {
+            remotePath.value = response.path
+            addStatusLog(`当前目录: ${response.path}`)
+        })
+        console.log('收到 pwd 响应:', pwdResponse)
+
+        // 确保在发送 list 命令之前有一个短暂延迟
+        await new Promise(resolve => setTimeout(resolve, 100))
+        //下载文件夹
+        //const localDownloadFolder = `${window.navigator.userAgent.includes('Windows') ? 'C:/Users/' + window.navigator.userName + '/Downloads' : '/home/' + window.navigator.userName + '/Downloads'}`;
         // 这里添加实际的下载逻辑
         for (const fileName of selectedFilesList) {
-            await new Promise(resolve => setTimeout(resolve, 1000)) // 模拟下载延迟
-            addStatusLog(`文件 ${fileName} 下载成功`)
+            const downloadPayload = {
+                cmd: "download",
+                remotePath: `${remotePath.value}/${fileName}`,
+                localPath: `${localDownloadFolder}/${fileName}`,
+                resume: false
+            };
+            console.log('发送 download 命令:', downloadPayload);
+            socket.value.send(JSON.stringify(downloadPayload));
+
+            // 等待 download 指令的响应
+            const downloadResponse = await handleWebSocketMessage("download", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`文件 ${fileName} 下载成功`);
+                } else {
+                    throw new Error(`文件 ${fileName} 下载失败: ${response.error}`);
+                }
+            });
+            console.log('收到 download 响应:', downloadResponse);
         }
-        
-        // 清空选择 - 使用新的空 Set
-        selectedRemoteFiles.value = new Set()
     } catch (error) {
         addStatusLog(`下载失败: ${error.message}`)
     }
@@ -342,6 +389,11 @@ const handleWebSocketMessage = (cmd, callback) => {
                     callback(response)
                     resolve(response)
                 } else if (cmd === "cd" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
+                } else if (cmd === "download" && response.status === "success") {
                     socket.value.removeEventListener('message', messageHandler)
                     clearTimeout(timeoutId)
                     callback(response)
