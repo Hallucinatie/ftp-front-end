@@ -81,6 +81,36 @@
                         <span v-if="certificate" class="file-name">
                             {{ certificate.name }}
                         </span>
+
+                        <label for="privateKey" class="file-label">
+                            <Upload class="button-icon" />
+                            选择私钥
+                            <input
+                                type="file"
+                                id="privateKey"
+                                @change="handlePrivateKeyUpload"
+                                accept=".key,.pem"
+                                class="file-input"
+                            >
+                        </label>
+                        <span v-if="privateKey" class="file-name">
+                            {{ privateKey.name }}
+                        </span>
+
+                        <label for="ca" class="file-label">
+                            <Upload class="button-icon" />
+                            选择 CA 文件
+                            <input
+                                type="file"
+                                id="ca"
+                                @change="handleCAUpload"
+                                accept=".crt,.pem"
+                                class="file-input"
+                            >
+                        </label>
+                        <span v-if="ca" class="file-name">
+                            {{ ca.name }}
+                        </span>
                     </div>
                     
                     <button 
@@ -126,7 +156,7 @@ import { ref, computed } from 'vue'
 import { Sun, Moon, Server, Hash, User, Lock, Upload, LogIn, LogOut, Eraser } from 'lucide-vue-next'
 import { useRouter } from 'vue-router'
 import { useFtpStore } from '../stores/ftpStore'
-
+const { ipcRenderer, remote } = window.require('electron');
 const router = useRouter()
 const ftpStore = useFtpStore()
 
@@ -136,6 +166,8 @@ const username = ref('')
 const password = ref('')
 const useTLS = ref(false)
 const certificate = ref(null)
+const key = ref(null)
+const ca = ref(null)
 const isLoggedIn = ref(false)
 
 // 使用 store 中的状态
@@ -182,6 +214,16 @@ const loginToServer = () => {
             port: Number(port.value),
             useTLS: useTLS.value,
         }
+        if (useTLS.value) {
+        if (ca && certificate && key) {
+            connectPayload.ca_file = ca.value;        // CA 文件名
+            connectPayload.cert_file = certificate.value; // 证书文件名
+            connectPayload.key_file = key.value;   // 私钥文件名
+        } else {
+            console.error("TLS 需要提供 CA 文件、证书文件和私钥文件！");
+            addStatusLog(`缺少必要文件`)
+        }
+    }
         socket_login.value.send(JSON.stringify(connectPayload))
         addStatusLog(`发送连接请求...`)
     }
@@ -234,14 +276,55 @@ const loginToServer = () => {
     }
 }
 
-const handleCertificateUpload = (event) => {
-    const file = event.target.files[0]
-    if (file) {
-        certificate.value = file
-        addStatusLog(`证书已选择: ${file.name}`)
-    }
-}
 
+
+const handleCertificateUpload = async (event) => {
+    try {
+        // Open the file dialog from the main process
+        const result = await ipcRenderer.invoke('open-file-dialog');
+        if (result.success) {
+            certificate.value = result.filePath; // Store the file path
+            console.log("证书路径：",certificate.value);
+            addStatusLog(`已选择证书: ${result.fileName}`);
+        } else {
+            addStatusLog('未选择证书');
+        }
+    } catch (err) {
+        addStatusLog(`打开证书失败: ${err.message}`);
+    }
+};
+
+const handlePrivateKeyUpload = async (event) => {
+    try {
+        // Open the file dialog from the main process
+        const result = await ipcRenderer.invoke('open-key-dialog');
+        if (result.success) {
+            key.value = result.filePath; // Store the file path
+            console.log("私钥路径：",key.value);
+            addStatusLog(`已选择私钥: ${result.fileName}`);
+        } else {
+            addStatusLog('未选择私钥');
+        }
+    } catch (err) {
+        addStatusLog(`打开私钥失败: ${err.message}`);
+    }
+};
+
+const handleCAUpload = async (event) => {
+    try {
+        // Open the file dialog from the main process
+        const result = await ipcRenderer.invoke('open-ca-dialog');
+        if (result.success) {
+            ca.value = result.filePath; // Store the file path
+            console.log("CA路径：",ca.value);
+            addStatusLog(`已选择CA: ${result.fileName}`);
+        } else {
+            addStatusLog('未选择CA');
+        }
+    } catch (err) {
+        addStatusLog(`打开CA失败: ${err.message}`);
+    }
+};
 const logoutFromServer = () => {
     isLoggedIn.value = false
     addStatusLog(`正在断开与 ${host.value}:${port.value} 的连接...`);

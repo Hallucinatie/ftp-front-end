@@ -148,3 +148,45 @@ ipcMain.handle('read-directory', async (event, dirPath) => {
     }
   }
 })
+ipcMain.handle('open-file-dialog', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [
+            { name: 'Certificates', extensions: ['crt', 'pem'] } // Accept only .crt and .pem files
+        ]
+    });
+
+    if (!result.canceled && result.filePaths.length > 0) {
+        return { success: true, filePath: result.filePaths[0], fileName: result.filePaths[0].split('/').pop() };
+    } else {
+        return { success: false };
+    }
+});
+ipcMain.handle('open-key-dialog', async () => {
+  const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+          { name: 'privateKey', extensions: ['key'] } // Accept only .crt and .pem files
+      ]
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0], fileName: result.filePaths[0].split('/').pop() };
+  } else {
+      return { success: false };
+  }
+});
+ipcMain.handle('open-ca-dialog', async () => {
+  const result = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [
+          { name: 'ca', extensions: ['crt', 'pem'] } // Accept only .crt and .pem files
+      ]
+  });
+
+  if (!result.canceled && result.filePaths.length > 0) {
+      return { success: true, filePath: result.filePaths[0], fileName: result.filePaths[0].split('/').pop() };
+  } else {
+      return { success: false };
+  }
+});
