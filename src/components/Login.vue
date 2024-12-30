@@ -67,46 +67,27 @@
                     </div>
                     
                     <div v-if="useTLS" class="certificate-upload">
-                        <label for="certificate" class="file-label">
+                        <label for="certificate" class="file-label" @click="handleCertificateUpload">
                             <Upload class="button-icon" />
                             选择证书
-                            <input
-                                type="file"
-                                id="certificate"
-                                @change="handleCertificateUpload"
-                                accept=".crt,.pem"
-                                class="file-input"
-                            >
                         </label>
                         <span v-if="certificate" class="file-name">
                             {{ certificate.name }}
                         </span>
 
-                        <label for="privateKey" class="file-label">
+                        <label for="privateKey" class="file-label" @click="handlePrivateKeyUpload">
                             <Upload class="button-icon" />
                             选择私钥
-                            <input
-                                type="file"
-                                id="privateKey"
-                                @change="handlePrivateKeyUpload"
-                                accept=".key,.pem"
-                                class="file-input"
-                            >
+                            
                         </label>
                         <span v-if="privateKey" class="file-name">
                             {{ privateKey.name }}
                         </span>
 
-                        <label for="ca" class="file-label">
+                        <label for="ca" class="file-label" @click="handleCAUpload">
                             <Upload class="button-icon" />
                             选择 CA 文件
-                            <input
-                                type="file"
-                                id="ca"
-                                @change="handleCAUpload"
-                                accept=".crt,.pem"
-                                class="file-input"
-                            >
+                            
                         </label>
                         <span v-if="ca" class="file-name">
                             {{ ca.name }}
