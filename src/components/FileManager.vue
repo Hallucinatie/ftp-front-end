@@ -5,10 +5,21 @@
             <div class="header-content">
                 <h1 class="title">FTP Client</h1>
                 <p class="subtitle">Manage your FTP server connections</p>
+                
                 <button @click="toggleDarkMode" class="theme-toggle">
                     <Sun v-if="isDarkMode" class="icon" />
                     <Moon v-else class="icon" />
                 </button>
+                <div class="transfer-mode-toggle">
+                    <span class="mode-label">{{ transferMode ? '主动模式' : '被动模式' }}</span>
+                    <div 
+                        class="switch" 
+                        :class="{ active: transferMode }" 
+                        @click="toggleTransferMode"
+                    >
+                        <div class="switch-handle"></div>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -454,6 +465,11 @@ const handleWebSocketMessage = (cmd, callback) => {
                     clearTimeout(timeoutId)
                     callback(response)
                     resolve(response)
+                }else if (cmd === "setTransferMode" && response.status === "success") {
+                    socket.value.removeEventListener('message', messageHandler)
+                    clearTimeout(timeoutId)
+                    callback(response)
+                    resolve(response)
                 }
 
             } catch (error) {
@@ -834,6 +850,32 @@ watch(remotePath, (newPath) => {
     console.log('远程路径已更新:', newPath)
 })
 
+const transferMode = ref(false); // false: 被动模式, true: 主动模式
+
+const toggleTransferMode = async () => {
+    transferMode.value = !transferMode.value;
+    console.log(`当前传输模式: ${transferMode.value ? '主动模式' : '被动模式'}`);
+    try{
+        // 设置setTransferType
+        const setTransferModePayload={
+            cmd:"setTransferMode",
+            mode:`${transferMode.value ? 'ACTIVE' : 'PASSIVE'}`
+        }
+        console.log('发送 setTransferMode 命令:', setTransferModePayload)
+        socket.value.send(JSON.stringify(setTransferModePayload))
+        // 等待 setTransferMode 指令的响应
+        const setTransferModeResponse = await handleWebSocketMessage("setTransferMode", (response) => {
+                if (response.status === "success") {
+                    addStatusLog(`当前传输模式: ${transferMode.value ? '主动模式' : '被动模式'}`);
+                } else {
+                    throw new Error(`模式更改失败 ${response.error}`);
+                }
+            });
+            console.log('收到 setTransferMode 响应:', setTransferModeResponse);
+    }catch(error) {
+        addStatusLog(`设置模式失败: ${error.message}`)
+    }
+};
 </script>
 
 <style scoped>
@@ -1045,5 +1087,47 @@ watch(remotePath, (newPath) => {
 .file-icon {
     width: 1.25rem;
     height: 1.25rem;
+}
+.transfer-mode-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end; /* 靠右对齐 */
+    gap: 10px;
+    margin-right: 40px;
+    margin-top: -65px;
+}
+
+.mode-label {
+    font-size: 16px;
+    font-weight: bold;
+}
+
+.switch {
+    width: 50px;
+    height: 25px;
+    background-color: #ccc;
+    border-radius: 15px;
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.switch.active {
+    background-color: #4caf50;
+}
+
+.switch-handle {
+    width: 20px;
+    height: 20px;
+    background-color: #fff;
+    border-radius: 50%;
+    position: absolute;
+    top: 2.5px;
+    left: 2.5px;
+    transition: left 0.3s ease;
+}
+
+.switch.active .switch-handle {
+    left: 27.5px;
 }
 </style>
